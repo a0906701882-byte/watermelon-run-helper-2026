@@ -16,7 +16,6 @@ class CaptureService : Service() {
     private var windowManager: WindowManager? = null
     private var floatingView: View? = null
 
-    // 畫面上的文字控制元件
     private var tvScreenStatus: TextView? = null
     private var tvMapStatus: TextView? = null
     private var tvAudioStatus: TextView? = null
@@ -33,10 +32,8 @@ class CaptureService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        // 載入我們整合好的戰術控制面板佈局
         floatingView = LayoutInflater.from(this).inflate(R.layout.overlay_layout, null)
 
-        // 綁定 UI 元件 ID
         tvScreenStatus = floatingView?.findViewById(R.id.tvScreenStatus)
         tvMapStatus = floatingView?.findViewById(R.id.tvMapStatus)
         tvAudioStatus = floatingView?.findViewById(R.id.tvAudioStatus)
@@ -45,7 +42,6 @@ class CaptureService : Service() {
         tvMode = floatingView?.findViewById(R.id.tvMode)
         tvNearbyInfo = floatingView?.findViewById(R.id.tvNearbyInfo)
 
-        // 設定懸浮窗屬性
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
