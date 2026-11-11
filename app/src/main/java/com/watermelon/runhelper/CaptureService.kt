@@ -1,61 +1,81 @@
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="240dp"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:background="#CC141414"
-    android:padding="10dp"
-    android:elevation="8dp">
+package com.watermelon.runhelper
 
-    <!-- 頂部：助手標題（可拖曳區塊） -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="🍉 西瓜跑刀助手 3.0 | 拖曳移動"
-        android:textColor="#FF5252"
-        android:textSize="11sp"
-        android:textStyle="bold"
-        android:paddingBottom="4dp"/>
+import android.app.Service
+import android.content.Intent
+import android.graphics.PixelFormat
+import android.os.Build
+import android.os.IBinder
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.View
+import android.view.WindowManager
+import android.widget.TextView
 
-    <!-- 第一部分：原本的系統與擷取狀態 -->
-    <TextView
-        android:id="@+id/tvScreenStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="畫面：等待授權擷取 (🟢)"
-        android:textColor="#00E676"
-        android:textSize="9sp"
-        android:paddingBottom="2dp"/>
+class CaptureService : Service() {
 
-    <TextView
-        android:id="@+id/tvMapStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="地圖：等待畫面辨識"
-        android:textColor="#FFFFFF"
-        android:textSize="9sp"
-        android:paddingBottom="2dp"/>
+    private var windowManager: WindowManager? = null
+    private var floatingView: View? = null
 
-    <TextView
-        android:id="@+id/tvAudioStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="聲音：尚未分析"
-        android:textColor="#FFFFFF"
-        android:textSize="9sp"
-        android:paddingBottom="2dp"/>
+    // 畫面上的文字控制元件
+    private var tvScreenStatus: TextView? = null
+    private var tvMapStatus: TextView? = null
+    private var tvAudioStatus: TextView? = null
+    private var tvFootstepStatus: TextView? = null
+    private var tvPlayerPos: TextView? = null
+    private var tvMode: TextView? = null
+    private var tvNearbyInfo: TextView? = null
 
-    <TextView
-        android:id="@+id/tvFootstepStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="腳步判斷：不確定 | 等待聲音資料"
-        android:textColor="#FF9800"
-        android:textSize="9sp"
-        android:paddingBottom="4dp"/>
+    override fun onBind(intent: Intent?): IBinder? {
+        return null
+    }
 
-    <!-- 分隔線 -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height
+    override fun onCreate() {
+        super.onCreate()
+        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+
+        // 載入我們剛剛整合好的戰術控制面板佈局
+        floatingView = LayoutInflater.from(this).inflate(R.layout.overlay_layout, null)
+
+        // 綁定 UI 元件 ID
+        tvScreenStatus = floatingView?.findViewById(R.id.tvScreenStatus)
+        tvMapStatus = floatingView?.findViewById(R.id.tvMapStatus)
+        tvAudioStatus = floatingView?.findViewById(R.id.tvAudioStatus)
+        tvFootstepStatus = floatingView?.findViewById(R.id.tvFootstepStatus)
+        tvPlayerPos = floatingView?.findViewById(R.id.tvPlayerPos)
+        tvMode = floatingView?.findViewById(R.id.tvMode)
+        tvNearbyInfo = floatingView?.findViewById(R.id.tvNearbyInfo)
+
+        // 設定懸浮窗屬性
+        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            layoutType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 100
+            y = 100
+        }
+
+        try {
+            windowManager?.addView(floatingView, params)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (floatingView != null) {
+            windowManager?.removeView(floatingView)
+            floatingView = null
+        }
+    }
+}
