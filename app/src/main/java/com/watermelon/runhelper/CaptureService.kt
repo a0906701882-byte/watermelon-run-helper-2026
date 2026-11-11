@@ -149,11 +149,11 @@ class CaptureService : Service() {
                 processing.set(false)
                 broadcast(ocr = "畫面讀取失敗")
             }
-        }, worker!!.looper)
+        }, Handler(worker!!.looper))
         virtualDisplay = projection?.createVirtualDisplay(
             "WatermelonScreenCapture", width, height, density,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            reader?.surface, null, worker?.looper
+            reader?.surface, null, Handler(worker!!.looper)
         )
     }
 
