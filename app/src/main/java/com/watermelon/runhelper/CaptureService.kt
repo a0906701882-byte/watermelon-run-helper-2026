@@ -33,7 +33,7 @@ class CaptureService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        // 載入我們剛剛整合好的戰術控制面板佈局
+        // 載入我們整合好的戰術控制面板佈局
         floatingView = LayoutInflater.from(this).inflate(R.layout.overlay_layout, null)
 
         // 綁定 UI 元件 ID
