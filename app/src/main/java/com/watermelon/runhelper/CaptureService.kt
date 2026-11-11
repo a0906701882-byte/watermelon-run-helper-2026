@@ -58,44 +58,4 @@
     <!-- 分隔線 -->
     <View
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#444444"
-        android:layout_marginVertical="3dp"/>
-
-    <!-- 第二部分：融入的戰術導航資訊 -->
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="【戰術導航資訊】"
-        android:textColor="#FF5252"
-        android:textSize="10sp"
-        android:textStyle="bold"
-        android:paddingBottom="2dp"/>
-
-    <TextView
-        android:id="@+id/tvPlayerPos"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="玩家位置：零號大壩 (X: 724, Y: 436)"
-        android:textColor="#FFFFFF"
-        android:textSize="9sp"
-        android:paddingBottom="2dp"/>
-
-    <TextView
-        android:id="@+id/tvMode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="跑刀模式：高收益跑刀 📈"
-        android:textColor="#FFD700"
-        android:textSize="9sp"
-        android:paddingBottom="2dp"/>
-
-    <TextView
-        android:id="@+id/tvNearbyInfo"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="附近資訊：物資點 52m | 撤離點 126m (🟢)"
-        android:textColor="#AAAAAA"
-        android:textSize="9sp"/>
-
-</LinearLayout>
+        android:layout_height
