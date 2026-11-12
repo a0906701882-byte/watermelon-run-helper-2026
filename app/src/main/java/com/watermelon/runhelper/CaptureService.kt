@@ -126,7 +126,8 @@ class CaptureService : Service() {
             val resultData = intent.getParcelableExtra<Intent>(MainActivity.EXTRA_RESULT_DATA)
 
             if (resultCode != 0 && resultData != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val projectionManager = getSystemService(MEDIA_PROJECTION_MANAGER) as MediaProjectionManager
+                // 修正：使用正確的小寫常數 MEDIA_PROJECTION_SERVICE
+                val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                 mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
                 if (mediaProjection != null) {
                     initGameAudioCapture(mediaProjection!!)
