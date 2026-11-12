@@ -1,3 +1,12 @@
+class MainActivity : AppCompatActivity() {
+
+    companion object {
+        const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
+        const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
+    }
+
+    // ... 其他原本的程式碼
+}
 companion object {
     const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
     const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
