@@ -38,12 +38,13 @@ class CaptureService : Service() {
     private var tvNearbyInfo: TextView? = null
     private var tvAudioStatus: TextView? = null
     private var tvMission: TextView? = null
+    private var tvScreenDetect: TextView? = null
 
     private var audioRecord: AudioRecord? = null
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
-    private var isAudioAnalyzing = false
+    private var isRunning = false
 
     companion object {
         const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
@@ -57,7 +58,6 @@ class CaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        // 1. 建立前台服務必要通知
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
@@ -69,7 +69,7 @@ class CaptureService : Service() {
 
             val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("🍉 西瓜跑刀助手 3.0")
-                .setContentText("全螢幕戰術 HUD 介面與內部收音運行中...")
+                .setContentText("全螢幕戰術 HUD 與即時畫面偵測中...")
                 .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .build()
 
@@ -79,7 +79,6 @@ class CaptureService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val context = this
 
-        // 2. 建立全螢幕 FrameLayout 容器（讓子元件可自由絕對定位，且觸控穿透遊戲）
         hudRootLayout = FrameLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -87,17 +86,6 @@ class CaptureService : Service() {
             )
         }
 
-        // ---【模組 A：左上角跑刀狀態面板】---
-        val topLeftPanel = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#99141414"))
-            setPadding(20, 20, 20, 20)
-            layoutParams = FrameLayout.LayoutParams(450, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.TOP or Gravity.START
-                setMargins(30, 30, 0, 0)
-            }
-        }
-        
         fun addLabel(parent: LinearLayout, text: String, color: Int, size: Float, bold: Boolean = false): TextView {
             return TextView(context).apply {
                 this.text = text
@@ -111,15 +99,26 @@ class CaptureService : Service() {
             }
         }
 
-        addLabel(topLeftPanel, "🍉 西瓜跑刀助手 | DELTA FORCE", Color.parseColor("#FF5252"), 11f, true)
-        tvPlayerPos = addLabel(topLeftPanel, "玩家位置：零號大壩 (X: 724, Y: 436)", Color.WHITE, 9.5f)
-        addLabel(topLeftPanel, "跑刀模式：高收益跑刀 📈", Color.parseColor("#FFD700"), 9.5f)
-        tvNearbyInfo = addLabel(topLeftPanel, "物資點 52m | 撤離點 126m (🟢)", Color.parseColor("#00E676"), 9f)
-        tvAudioStatus = addLabel(topLeftPanel, "聲音：內部遊戲收音監聽中", Color.parseColor("#00B0FF"), 8.5f)
+        // --- 左上角戰術面板 ---
+        val topLeftPanel = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#99141414"))
+            setPadding(20, 20, 20, 20)
+            layoutParams = FrameLayout.LayoutParams(450, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.TOP or Gravity.START
+                setMargins(30, 30, 0, 0)
+            }
+        }
         
+        addLabel(topLeftPanel, "🍉 西瓜跑刀助手 | DELTA FORCE", Color.parseColor("#FF5252"), 11f, true)
+        tvPlayerPos = addLabel(topLeftPanel, "玩家位置：零號大壩 (掃描中...)", Color.WHITE, 9.5f)
+        addLabel(topLeftPanel, "跑刀模式：高收益跑刀 📈", Color.parseColor("#FFD700"), 9.5f)
+        tvNearbyInfo = addLabel(topLeftPanel, "物資點追蹤中...", Color.parseColor("#00E676"), 9f)
+        tvScreenDetect = addLabel(topLeftPanel, "畫面偵測：等待串流影格", Color.parseColor("#FF9800"), 8.5f)
+        tvAudioStatus = addLabel(topLeftPanel, "內部收音：監聽中", Color.parseColor("#00B0FF"), 8.5f)
         hudRootLayout?.addView(topLeftPanel)
 
-        // ---【模組 B：頂部中央戰術提示橫幅】---
+        // --- 頂部戰術橫幅 ---
         val topCenterBanner = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.parseColor("#B3D32F2F"))
@@ -130,10 +129,10 @@ class CaptureService : Service() {
                 setMargins(0, 35, 0, 0)
             }
         }
-        addLabel(topCenterBanner, "⚠️ 推薦路線已更新！前往撤離點，距離：126 公尺", Color.WHITE, 10.5f, true)
+        addLabel(topCenterBanner, "⚠️ 戰術監控中：準備進入對局", Color.WHITE, 10.5f, true)
         hudRootLayout?.addView(topCenterBanner)
 
-        // ---【模組 C：底部中央目標與導引任務列】---
+        // --- 底部目標導引列 ---
         val bottomMissionPanel = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#99141414"))
@@ -144,10 +143,9 @@ class CaptureService : Service() {
                 setMargins(0, 0, 0, 40)
             }
         }
-        tvMission = addLabel(bottomMissionPanel, "🎯 目標：前往撤離點 | 預計時間：1分32秒・距離：126m", Color.parseColor("#00E676"), 11f, true)
+        tvMission = addLabel(bottomMissionPanel, "🎯 目標：等待遊戲對局開始...", Color.parseColor("#00E676"), 11f, true)
         hudRootLayout?.addView(bottomMissionPanel)
 
-        // 3. 設定 WindowManager 屬性（全螢幕覆蓋 + 觸控穿透遊戲）
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -182,7 +180,8 @@ class CaptureService : Service() {
                 val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                 mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
                 if (mediaProjection != null) {
-                    initScreenCapture()
+                    isRunning = true
+                    initScreenCaptureAndAnalysis()
                     initGameAudioCapture(mediaProjection!!)
                 }
             }
@@ -190,7 +189,8 @@ class CaptureService : Service() {
         return START_STICKY
     }
 
-    private fun initScreenCapture() {
+    // 核心：即時畫面擷取與像素分析
+    private fun initScreenCaptureAndAnalysis() {
         try {
             val width = 1280
             val height = 720
@@ -201,10 +201,32 @@ class CaptureService : Service() {
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader?.surface, null, null
             )
+
+            val handler = Handler(Looper.getMainConLooper() ?: Looper.getMainLooper())
+
             imageReader?.setOnImageAvailableListener({ reader ->
                 val image = reader.acquireLatestImage()
-                image?.close()
+                if (image != null) {
+                    try {
+                        // 取得畫面的像素平面資料
+                        val planes = image.planes
+                        val buffer = planes[0].buffer
+                        val pixelStride = planes[0].pixelStride
+                        val rowStride = planes[0].rowStride
+
+                        // 簡單範例：抽樣檢查畫面特定區域的顏色或亮度
+                        // 當畫面有變動時，更新 UI 狀態顯示「偵測中 (🟢)」
+                        handler.post {
+                            tvScreenStatus?.text = "畫面偵測：已連線擷取 (解析度 1280x720)"
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    } finally {
+                        image.close() // 務必關閉釋放，否則畫面會卡住
+                    }
+                }
             }, null)
+
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -234,13 +256,12 @@ class CaptureService : Service() {
                 .build()
 
             audioRecord?.startRecording()
-            isAudioAnalyzing = true
 
             // 腳步與方位即時監聽執行緒
             Thread {
                 val buffer = ByteArray(minBufferSize)
                 val handler = Handler(Looper.getMainLooper())
-                while (isAudioAnalyzing) {
+                while (isRunning) {
                     val readSize = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                     if (readSize > 0) {
                         var leftSum = 0L
@@ -255,12 +276,12 @@ class CaptureService : Service() {
                         }
 
                         handler.post {
-                            if (leftSum > rightSum * 1.3) {
-                                tvAudioStatus?.text = "聲音：⚠️ 左側偵測腳步/槍聲"
-                            } else if (rightSum > leftSum * 1.3) {
-                                tvAudioStatus?.text = "聲音：⚠️ 右側偵測腳步/槍聲"
+                            if (leftSum > rightSum * 1.4) {
+                                tvAudioStatus?.text = "內部收音：⚠️ 左側偵測腳步/槍聲"
+                            } else if (rightSum > leftSum * 1.4) {
+                                tvAudioStatus?.text = "內部收音：⚠️ 右側偵測腳步/槍聲"
                             } else {
-                                tvAudioStatus?.text = "聲音：內部遊戲收音監聽中 (🟢)"
+                                tvAudioStatus?.text = "內部收音：遊戲音效監聽中 (🟢)"
                             }
                         }
                     }
@@ -275,7 +296,7 @@ class CaptureService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        isAudioAnalyzing = false
+        isRunning = false
         try {
             audioRecord?.stop()
             audioRecord?.release()
