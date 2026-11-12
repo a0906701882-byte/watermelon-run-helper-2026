@@ -1,4 +1,3 @@
-// watermelon-run-helper
 package com.watermelon.runhelper
 
 import android.app.Service
@@ -10,6 +9,7 @@ import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
 import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
@@ -34,7 +34,17 @@ class CaptureService : Service() {
 
     // 內部遊戲音訊收音物件
     private var audioRecord: AudioRecord? = null
+    private var mediaProjection: MediaProjection? = null
     private var isCapturingAudio = false
+
+    companion object {
+        const val ACTION_UPDATE = "com.watermelon.runhelper.ACTION_UPDATE"
+        const val EXTRA_OCR = "EXTRA_OCR"
+        const val EXTRA_AUDIO = "EXTRA_AUDIO"
+        const val EXTRA_STATE = "EXTRA_STATE"
+        const val EXTRA_MAP = "EXTRA_MAP"
+        const val EXTRA_CLASSIFICATION = "EXTRA_CLASSIFICATION"
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -78,7 +88,7 @@ class CaptureService : Service() {
         }
         floatingView?.addView(divider)
 
-        // 3. 系統狀態與辨識控制（包含專屬遊戲內部收音狀態）
+        // 3. 系統狀態與辨識控制
         tvScreenStatus = addTextView("畫面：等待授權擷取 (🟢)", Color.parseColor("#00E676"), 9f)
         tvMapStatus = addTextView("地圖：等待畫面辨識", Color.WHITE, 9f)
         tvAudioStatus = addTextView("聲音：內部收音就緒 (僅限遊戲音效)", Color.parseColor("#00E676"), 9f)
@@ -110,10 +120,26 @@ class CaptureService : Service() {
         }
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent != null) {
+            val resultCode = intent.getIntExtra(MainActivity.EXTRA_RESULT_CODE, 0)
+            val resultData = intent.getParcelableExtra<Intent>(MainActivity.EXTRA_RESULT_DATA)
+
+            if (resultCode != 0 && resultData != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val projectionManager = getSystemService(MEDIA_PROJECTION_MANAGER) as MediaProjectionManager
+                mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
+                if (mediaProjection != null) {
+                    initGameAudioCapture(mediaProjection!!)
+                }
+            }
+        }
+        return START_STICKY
+    }
+
     /**
-     * 初始化專門抓取遊戲內聲音的方法（需搭配 Android 10+ 與 MediaProjection）
+     * 初始化專門抓取遊戲內聲音的方法（透過 MediaProjection 與 AudioPlaybackCapture）
      */
-    fun initGameAudioCapture(mediaProjection: MediaProjection) {
+    private fun initGameAudioCapture(projection: MediaProjection) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         try {
             val audioFormat = AudioFormat.Builder()
@@ -122,8 +148,8 @@ class CaptureService : Service() {
                 .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
                 .build()
 
-            // 透過 MediaProjection 擷取僅限遊戲與媒體的內部聲音，完美過濾麥克風雜音
-            val playbackCaptureConfiguration = AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
+            // 僅擷取遊戲與媒體聲音，完美過濾外部雜音與麥克風
+            val playbackCaptureConfiguration = AudioPlaybackCaptureConfiguration.Builder(projection)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .build()
@@ -149,6 +175,7 @@ class CaptureService : Service() {
             audioRecord?.stop()
             audioRecord?.release()
             audioRecord = null
+            mediaProjection?.stop()
         } catch (e: Exception) {
             e.printStackTrace()
         }
