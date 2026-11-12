@@ -19,7 +19,7 @@ class OverlayService : Service() {
         return null
     }
 
-    override fun onCreate() {
-        super.onCreate()
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
     }
 }
