@@ -1,3 +1,7 @@
+companion object {
+    const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
+    const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
+}
 package com.watermelon.runhelper
 
 import android.Manifest
