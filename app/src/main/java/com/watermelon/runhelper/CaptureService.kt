@@ -1,5 +1,8 @@
 package com.watermelon.runhelper
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.graphics.Color
@@ -17,13 +20,13 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.app.NotificationCompat
 
 class CaptureService : Service() {
 
     private var windowManager: WindowManager? = null
     private var floatingView: LinearLayout? = null
 
-    // UI 元件
     private var tvScreenStatus: TextView? = null
     private var tvMapStatus: TextView? = null
     private var tvAudioStatus: TextView? = null
@@ -32,24 +35,40 @@ class CaptureService : Service() {
     private var tvMode: TextView? = null
     private var tvNearbyInfo: TextView? = null
 
-    // 內部遊戲音訊收音物件
     private var audioRecord: AudioRecord? = null
     private var mediaProjection: MediaProjection? = null
-    private var isCapturingAudio = false
 
     companion object {
-        const val ACTION_UPDATE = "com.watermelon.runhelper.ACTION_UPDATE"
-        const val EXTRA_OCR = "EXTRA_OCR"
-        const val EXTRA_AUDIO = "EXTRA_AUDIO"
-        const val EXTRA_STATE = "EXTRA_STATE"
-        const val EXTRA_MAP = "EXTRA_MAP"
-        const val EXTRA_CLASSIFICATION = "EXTRA_CLASSIFICATION"
+        const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
+        const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
+        private const val CHANNEL_ID = "WatermelonRunHelperChannel"
+        private const val NOTIFICATION_ID = 1
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        
+        // 針對 Android 8.0+ 建立前台服務必要通知頻道，防止被系統強制終止
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "西瓜跑刀助手前台服務",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.createNotificationChannel(channel)
+
+            val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("🍉 西瓜跑刀助手 3.0")
+                .setContentText("戰術懸浮窗與內部收音運行中...")
+                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .build()
+
+            startForeground(NOTIFICATION_ID, notification)
+        }
+
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
         val context = this
@@ -73,28 +92,22 @@ class CaptureService : Service() {
             }
         }
 
-        // 1. 頂部標題
         addTextView("🍉 西瓜跑刀助手 3.0 | 戰術面板", Color.parseColor("#FF5252"), 12f, true)
-
-        // 2. 戰術導航資訊
         tvPlayerPos = addTextView("玩家位置：零號大壩 (X: 724, Y: 436)", Color.WHITE, 10f)
         tvMode = addTextView("跑刀模式：高收益跑刀 📈", Color.parseColor("#FFD700"), 10f)
         tvNearbyInfo = addTextView("附近資訊：物資點 52m | 撤離點 126m (🟢)", Color.parseColor("#AAAAAA"), 9f)
 
-        // 分隔線
         val divider = android.view.View(context).apply {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 2).apply { setMargins(0, 4, 0, 8) }
             setBackgroundColor(Color.parseColor("#444444"))
         }
         floatingView?.addView(divider)
 
-        // 3. 系統狀態與辨識控制
         tvScreenStatus = addTextView("畫面：等待授權擷取 (🟢)", Color.parseColor("#00E676"), 9f)
         tvMapStatus = addTextView("地圖：等待畫面辨識", Color.WHITE, 9f)
         tvAudioStatus = addTextView("聲音：內部收音就緒 (僅限遊戲音效)", Color.parseColor("#00E676"), 9f)
         tvFootstepStatus = addTextView("腳步判斷：監聽中 | 槍聲/腳步過濾", Color.parseColor("#FF9800"), 9f)
 
-        // 設定懸浮窗屬性
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -102,7 +115,7 @@ class CaptureService : Service() {
         }
 
         val params = WindowManager.LayoutParams(
-            750, // 寬度
+            750,
             WindowManager.LayoutParams.WRAP_CONTENT,
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
@@ -122,11 +135,10 @@ class CaptureService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent != null) {
-            val resultCode = intent.getIntExtra(MainActivity.EXTRA_RESULT_CODE, 0)
-            val resultData = intent.getParcelableExtra<Intent>(MainActivity.EXTRA_RESULT_DATA)
+            val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
+            val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
 
             if (resultCode != 0 && resultData != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // 修正：使用正確的小寫常數 MEDIA_PROJECTION_SERVICE
                 val projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                 mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
                 if (mediaProjection != null) {
@@ -137,9 +149,6 @@ class CaptureService : Service() {
         return START_STICKY
     }
 
-    /**
-     * 初始化專門抓取遊戲內聲音的方法（透過 MediaProjection 與 AudioPlaybackCapture）
-     */
     private fun initGameAudioCapture(projection: MediaProjection) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         try {
@@ -149,7 +158,6 @@ class CaptureService : Service() {
                 .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
                 .build()
 
-            // 僅擷取遊戲與媒體聲音，完美過濾外部雜音與麥克風
             val playbackCaptureConfiguration = AudioPlaybackCaptureConfiguration.Builder(projection)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
@@ -162,7 +170,6 @@ class CaptureService : Service() {
                 .build()
 
             audioRecord?.startRecording()
-            isCapturingAudio = true
             tvAudioStatus?.text = "聲音：內部遊戲收音中 (已過濾外部雜音)"
         } catch (e: Exception) {
             e.printStackTrace()
