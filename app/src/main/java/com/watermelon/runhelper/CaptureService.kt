@@ -50,7 +50,7 @@ class CaptureService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
         const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
-        private const val CHANNEL_ID = "WatermelonTextRadar"
+        private const val CHANNEL_ID = "WatermelonUltimateRadar"
         private const val NOTIFICATION_ID = 1
     }
 
@@ -62,15 +62,15 @@ class CaptureService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "西瓜視訊聯防文字雷達",
+                "西瓜終極靜步雷達",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
 
             val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("🍉 西瓜視訊聯防文字雷達")
-                .setContentText("動態過濾與精準方位提示運行中...")
+                .setContentTitle("🍉 西瓜終極靜步雷達")
+                .setContentText("全方位極致靜步捕捉中...")
                 .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .build()
 
@@ -91,13 +91,13 @@ class CaptureService : Service() {
             return TextView(context).apply {
                 this.text = text
                 setTextColor(Color.WHITE)
-                textSize = 20f
+                textSize = 22f
                 setTypeface(null, android.graphics.Typeface.BOLD)
-                setBackgroundColor(Color.parseColor("#99141414"))
-                setPadding(30, 22, 30, 22)
+                setBackgroundColor(Color.parseColor("#B3141414"))
+                setPadding(35, 25, 35, 25)
                 layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     this.gravity = gravity
-                    setMargins(45, 45, 45, 45)
+                    setMargins(50, 50, 50, 50)
                 }
             }
         }
@@ -160,7 +160,7 @@ class CaptureService : Service() {
             val height = 360
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
             virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "WatermelonMotionDisplay",
+                "WatermelonUltimateDisplay",
                 width, height, 200,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader?.surface, null, null
@@ -181,9 +181,9 @@ class CaptureService : Service() {
                             var idx = 0
                             while (idx < currentBytes.size) {
                                 diffSum += abs(currentBytes[idx] - prev[idx]).toLong()
-                                idx += 16
+                                idx += 12
                             }
-                            isScreenMoving = diffSum > 150000L
+                            isScreenMoving = diffSum > 120000L
                         }
                         previousPixelSample = currentBytes
                     } catch (e: Exception) {
@@ -227,7 +227,7 @@ class CaptureService : Service() {
             Thread {
                 val buffer = ByteArray(minBufferSize)
                 val handler = Handler(Looper.getMainLooper())
-                var baselineNoise = 300L
+                var baselineNoise = 250L
 
                 while (isRunning) {
                     val readSize = audioRecord?.read(buffer, 0, buffer.size) ?: 0
@@ -253,64 +253,65 @@ class CaptureService : Service() {
                         val lAvg = leftSum / sampleCount
                         val rAvg = rightSum / sampleCount
 
-                        baselineNoise = (baselineNoise * 0.92 + avgEnergy * 0.08).toLong()
-                        val dynamicThreshold = baselineNoise + 90L
+                        baselineNoise = (baselineNoise * 0.90 + avgEnergy * 0.10).toLong()
                         val isSelfMoving = isScreenMoving
+
+                        val stealthMin = baselineNoise + 15L
+                        val stealthMax = baselineNoise + 110L
 
                         handler.post {
                             when {
                                 isSelfMoving -> {
+                                    // 自身移動中：背景過濾，但顯示一般安全狀態文字（絕不顯示自身過濾字樣）
                                     tvLeftAlert?.text = "⬅️ 左側：安全"
                                     tvLeftAlert?.setTextColor(Color.WHITE)
-                                    tvRightAlert?.text = "右側：安全 ➡️"
-                                    tvRightAlert?.setTextColor(Color.WHITE)
-                                    tvCenterAlert?.text = "⬆️ 正前方：移動中 (自身過濾)"
-                                    tvCenterAlert?.setTextColor(Color.parseColor("#00B0FF"))
-                                }
-                                avgEnergy in (baselineNoise + 30)..(baselineNoise + 120) -> {
-                                    tvLeftAlert?.text = "⬅️ 左側：靜步潛行中"
-                                    tvLeftAlert?.setTextColor(Color.parseColor("#00E676"))
-                                    tvRightAlert?.text = "右側：靜步潛行中 ➡️"
-                                    tvRightAlert?.setTextColor(Color.parseColor("#00E676"))
-                                    tvCenterAlert?.text = "⬆️ 正前方：靜步潛行"
-                                    tvCenterAlert?.setTextColor(Color.parseColor("#00E676"))
-                                }
-                                lAvg > rAvg * 1.6 && lAvg > dynamicThreshold -> {
-                                    tvLeftAlert?.text = "⚠️ ⬅️ 【左側】敵方腳步！"
-                                    tvLeftAlert?.setTextColor(Color.parseColor("#FF5252"))
                                     tvRightAlert?.text = "右側：安全 ➡️"
                                     tvRightAlert?.setTextColor(Color.WHITE)
                                     tvCenterAlert?.text = "⬆️ 正前方：安全"
                                     tvCenterAlert?.setTextColor(Color.WHITE)
                                 }
-                                rAvg > lAvg * 1.6 && rAvg > dynamicThreshold -> {
-                                    tvLeftAlert?.text = "⬅️ 左側：安全"
-                                    tvLeftAlert?.setTextColor(Color.WHITE)
-                                    tvRightAlert?.text = "【右側】敵方腳步！ ➡️"
-                                    tvRightAlert?.setTextColor(Color.parseColor("#FF5252"))
-                                    tvCenterAlert?.text = "⬆️ 正前方：安全"
-                                    tvCenterAlert?.setTextColor(Color.WHITE)
-                                }
-                                avgEnergy > dynamicThreshold + 90 -> {
-                                    tvLeftAlert?.text = "⬅️ 左側"
-                                    tvLeftAlert?.setTextColor(Color.WHITE)
-                                    tvRightAlert?.text = "右側 ➡️"
-                                    tvRightAlert?.setTextColor(Color.WHITE)
-                                    tvCenterAlert?.text = "⚠️ ⬆️ 【正前方】敵方腳步！"
-                                    tvCenterAlert?.setTextColor(Color.parseColor("#FFD700"))
+                                avgEnergy in stealthMin..stealthMax -> {
+                                    // 敵方靜步強力鎖定
+                                    when {
+                                        lAvg > rAvg * 1.25 -> {
+                                            tvLeftAlert?.text = "⚠️ ⬅️ 【左側】敵方靜步摸進！"
+                                            tvLeftAlert?.setTextColor(Color.parseColor("#00E676"))
+                                            tvRightAlert?.text = "右側：安全 ➡️"
+                                            tvRightAlert?.setTextColor(Color.WHITE)
+                                            tvCenterAlert?.text = "⬆️ 正前方：安全"
+                                            tvCenterAlert?.setTextColor(Color.WHITE)
+                                        }
+                                        rAvg > lAvg * 1.25 -> {
+                                            tvLeftAlert?.text = "⬅️ 左側：安全"
+                                            tvLeftAlert?.setTextColor(Color.WHITE)
+                                            tvRightAlert?.text = "【右側】敵方靜步摸進！ ➡️"
+                                            tvRightAlert?.setTextColor(Color.parseColor("#00E676"))
+                                            tvCenterAlert?.text = "⬆️ 正前方：安全"
+                                            tvCenterAlert?.setTextColor(Color.WHITE)
+                                        }
+                                        else -> {
+                                            tvLeftAlert?.text = "⬅️ 左側"
+                                            tvLeftAlert?.setTextColor(Color.WHITE)
+                                            tvRightAlert?.text = "右側 ➡️"
+                                            tvRightAlert?.setTextColor(Color.WHITE)
+                                            tvCenterAlert?.text = "⚠️ ⬆️ 【正前方】敵方靜步摸進！"
+                                            tvCenterAlert?.setTextColor(Color.parseColor("#00E676"))
+                                        }
+                                    }
                                 }
                                 else -> {
-                                    tvLeftAlert?.text = "⬅️ 左側：無腳步"
+                                    // 靜步雷達監聽中
+                                    tvLeftAlert?.text = "⬅️ 左側：無靜步"
                                     tvLeftAlert?.setTextColor(Color.WHITE)
-                                    tvRightAlert?.text = "右側：無腳步 ➡️"
+                                    tvRightAlert?.text = "右側：無靜步 ➡️"
                                     tvRightAlert?.setTextColor(Color.WHITE)
-                                    tvCenterAlert?.text = "⬆️ 正前方：無腳步"
+                                    tvCenterAlert?.text = "⬆️ 正前方：靜步雷達監聽中"
                                     tvCenterAlert?.setTextColor(Color.WHITE)
                                 }
                             }
                         }
                     }
-                    Thread.sleep(50)
+                    Thread.sleep(40)
                 }
             }.start()
 
