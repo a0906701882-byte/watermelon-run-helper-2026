@@ -35,6 +35,7 @@ class CaptureService : Service() {
     private var tvRightAlert: TextView? = null
     private var tvCenterAlert: TextView? = null
     private var tvBackAlert: TextView? = null
+    private var tvDebugInfo: TextView? = null // 新增：即時能量與底噪數值顯示
 
     private var audioRecord: AudioRecord? = null
     private var mediaProjection: MediaProjection? = null
@@ -43,7 +44,7 @@ class CaptureService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
         const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
-        private const val CHANNEL_ID = "WatermelonLargeRadar"
+        private const val CHANNEL_ID = "WatermelonDebugRadar"
         private const val NOTIFICATION_ID = 1
     }
 
@@ -55,15 +56,15 @@ class CaptureService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "西瓜大字四向雷達",
+                "西瓜音訊數值雷達",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
 
             val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("🍉 西瓜大字四向雷達")
-                .setContentText("大字警報高能監聽中...")
+                .setContentTitle("🍉 西瓜四向雷達")
+                .setContentText("數值監控與隱藏雷達運行中...")
                 .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .build()
 
@@ -80,11 +81,12 @@ class CaptureService : Service() {
             )
         }
 
+        // 建立四向大字提示框（平時隱藏）
         fun createDirectionBox(gravity: Int): TextView {
             return TextView(context).apply {
                 text = ""
                 setTextColor(Color.WHITE)
-                textSize = 24f
+                textSize = 24f // 24 號清晰大字
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setBackgroundColor(Color.parseColor("#B3141414"))
                 setPadding(28, 18, 28, 18)
@@ -107,6 +109,21 @@ class CaptureService : Service() {
 
         tvBackAlert = createDirectionBox(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
         hudRootLayout?.addView(tvBackAlert)
+
+        // 建立即時能量與底噪數值小框（置於畫面頂端中央偏左，字體較小不擋視線，方便隨時觀察）
+        tvDebugInfo = TextView(context).apply {
+            text = "能量:0 | 底噪:250"
+            setTextColor(Color.YELLOW)
+            textSize = 13f
+            setBackgroundColor(Color.parseColor("#80000000"))
+            setPadding(14, 8, 14, 8)
+            visibility = View.VISIBLE // 數值常顯供除錯用
+            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                setMargins(0, 15, 0, 0)
+            }
+        }
+        hudRootLayout?.addView(tvDebugInfo)
 
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -202,7 +219,7 @@ class CaptureService : Service() {
                             val sampleEnergy = lVal + rVal
                             totalEnergy += sampleEnergy
 
-                            if (sampleEnergy > baselineNoise + 40L) {
+                            if (sampleEnergy > baselineNoise + 30L) {
                                 peakCount++
                             }
 
@@ -219,24 +236,26 @@ class CaptureService : Service() {
                         phaseHistory = (phaseHistory * 0.8 + phaseCross * 0.2).toLong()
 
                         val isSelfAction = abs(lAvg - rAvg) < (lAvg * 0.3) && avgEnergy > baselineNoise + 100L
-
-                        val stealthMin = baselineNoise + 15L
-                        val stealthMax = baselineNoise + 110L
-
-                        val isPlayerStealth = (avgEnergy in stealthMin..stealthMax) && (peakCount in 8..120)
+                        val footstepThreshold = 18L
+                        val hasFootstep = avgEnergy > baselineNoise + footstepThreshold
 
                         handler.post {
+                            // 隨時更新頂部的即時數值監控
+                            tvDebugInfo?.text = "能量:$avgEnergy | 底噪:$baselineNoise"
+
                             when {
-                                isSelfAction || !isPlayerStealth -> {
+                                isSelfAction || !hasFootstep -> {
+                                    // 安全或自身動作：四向大字隱藏
                                     tvLeftAlert?.visibility = View.INVISIBLE
                                     tvRightAlert?.visibility = View.INVISIBLE
                                     tvCenterAlert?.visibility = View.INVISIBLE
                                     tvBackAlert?.visibility = View.INVISIBLE
                                 }
                                 else -> {
+                                    // 偵測到周遭腳步：彈出對應方位大字
                                     when {
-                                        lAvg > rAvg * 1.35 -> {
-                                            tvLeftAlert?.text = "⚠️ ⬅️ 【左側】靜步"
+                                        lAvg > rAvg * 1.3 -> {
+                                            tvLeftAlert?.text = "⚠️ ⬅️ 【左側】腳步"
                                             tvLeftAlert?.setTextColor(Color.parseColor("#00E676"))
                                             tvLeftAlert?.visibility = View.VISIBLE
 
@@ -244,22 +263,22 @@ class CaptureService : Service() {
                                             tvCenterAlert?.visibility = View.INVISIBLE
                                             tvBackAlert?.visibility = View.INVISIBLE
                                         }
-                                        rAvg > lAvg * 1.35 -> {
+                                        rAvg > lAvg * 1.3 -> {
                                             tvLeftAlert?.visibility = View.INVISIBLE
 
-                                            tvRightAlert?.text = "【右側】靜步 ➡️"
+                                            tvRightAlert?.text = "【右側】腳步 ➡️"
                                             tvRightAlert?.setTextColor(Color.parseColor("#00E676"))
                                             tvRightAlert?.visibility = View.VISIBLE
 
                                             tvCenterAlert?.visibility = View.INVISIBLE
                                             tvBackAlert?.visibility = View.INVISIBLE
                                         }
-                                        phaseCross > phaseHistory * 1.15 -> {
+                                        phaseCross > phaseHistory * 1.12 -> {
                                             tvLeftAlert?.visibility = View.INVISIBLE
                                             tvRightAlert?.visibility = View.INVISIBLE
                                             tvBackAlert?.visibility = View.INVISIBLE
 
-                                            tvCenterAlert?.text = "⚠️ ⬆️ 【正前方】靜步"
+                                            tvCenterAlert?.text = "⚠️ ⬆️ 【正前方】腳步"
                                             tvCenterAlert?.setTextColor(Color.parseColor("#00E676"))
                                             tvCenterAlert?.visibility = View.VISIBLE
                                         }
@@ -268,7 +287,7 @@ class CaptureService : Service() {
                                             tvRightAlert?.visibility = View.INVISIBLE
                                             tvCenterAlert?.visibility = View.INVISIBLE
 
-                                            tvBackAlert?.text = "⚠️ ⬇️ 【背後】靜步摸進！"
+                                            tvBackAlert?.text = "⚠️ ⬇️ 【背後】敵方腳步！"
                                             tvBackAlert?.setTextColor(Color.parseColor("#FF5252"))
                                             tvBackAlert?.visibility = View.VISIBLE
                                         }
