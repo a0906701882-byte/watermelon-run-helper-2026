@@ -34,11 +34,10 @@ class CaptureService : Service() {
     private var windowManager: WindowManager? = null
     private var hudRootLayout: FrameLayout? = null
 
-    private var tvPlayerPos: TextView? = null
-    private var tvNearbyInfo: TextView? = null
-    private var tvAudioStatus: TextView? = null
-    private var tvMission: TextView? = null
-    private var tvScreenDetect: TextView? = null
+    private var tvLeftAlert: TextView? = null
+    private var tvRightAlert: TextView? = null
+    private var tvCenterAlert: TextView? = null
+    private var tvStatusOverview: TextView? = null
 
     private var audioRecord: AudioRecord? = null
     private var mediaProjection: MediaProjection? = null
@@ -49,7 +48,7 @@ class CaptureService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
         const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
-        private const val CHANNEL_ID = "WatermelonRunHelperChannel"
+        private const val CHANNEL_ID = "WatermelonFootstepChannel"
         private const val NOTIFICATION_ID = 1
     }
 
@@ -61,15 +60,15 @@ class CaptureService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "西瓜跑刀助手前台服務",
+                "西瓜純腳步聲納雷達",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
 
             val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("🍉 西瓜跑刀助手 3.0")
-                .setContentText("全螢幕戰術 HUD 與即時畫面偵測中...")
+                .setContentTitle("🍉 西瓜純腳步聲納雷達")
+                .setContentText("左右及正前方腳步與靜步監聽中...")
                 .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .build()
 
@@ -86,65 +85,46 @@ class CaptureService : Service() {
             )
         }
 
-        fun addLabel(parent: LinearLayout, text: String, color: Int, size: Float, bold: Boolean = false): TextView {
+        fun createDirectionBox(gravity: Int, text: String): TextView {
             return TextView(context).apply {
                 this.text = text
-                setTextColor(color)
-                textSize = size
-                if (bold) setTypeface(null, android.graphics.Typeface.BOLD)
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(0, 0, 0, 4)
+                setTextColor(Color.WHITE)
+                textSize = 13f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setBackgroundColor(Color.parseColor("#B3141414"))
+                setPadding(20, 15, 20, 15)
+                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    this.gravity = gravity
+                    setMargins(35, 35, 35, 35)
                 }
-                parent.addView(this)
             }
         }
 
-        // --- 左上角戰術面板 ---
-        val topLeftPanel = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#99141414"))
-            setPadding(20, 20, 20, 20)
-            layoutParams = FrameLayout.LayoutParams(450, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.TOP or Gravity.START
-                setMargins(30, 30, 0, 0)
-            }
-        }
-        
-        addLabel(topLeftPanel, "🍉 西瓜跑刀助手 | DELTA FORCE", Color.parseColor("#FF5252"), 11f, true)
-        tvPlayerPos = addLabel(topLeftPanel, "玩家位置：零號大壩 (掃描中...)", Color.WHITE, 9.5f)
-        addLabel(topLeftPanel, "跑刀模式：高收益跑刀 📈", Color.parseColor("#FFD700"), 9.5f)
-        tvNearbyInfo = addLabel(topLeftPanel, "物資點追蹤中...", Color.parseColor("#00E676"), 9f)
-        tvScreenDetect = addLabel(topLeftPanel, "畫面偵測：等待串流影格", Color.parseColor("#FF9800"), 8.5f)
-        tvAudioStatus = addLabel(topLeftPanel, "內部收音：監聽中", Color.parseColor("#00B0FF"), 8.5f)
-        hudRootLayout?.addView(topLeftPanel)
+        // --- 1. 左側螢幕指標 ---
+        tvLeftAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.START, "⬅️ 左側：無腳步")
+        hudRootLayout?.addView(tvLeftAlert)
 
-        // --- 頂部戰術橫幅 ---
-        val topCenterBanner = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.parseColor("#B3D32F2F"))
-            setPadding(25, 12, 25, 12)
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(600, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                setMargins(0, 35, 0, 0)
-            }
-        }
-        addLabel(topCenterBanner, "⚠️ 戰術監控中：準備進入對局", Color.WHITE, 10.5f, true)
-        hudRootLayout?.addView(topCenterBanner)
+        // --- 2. 右側螢幕指標 ---
+        tvRightAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.END, "右側：無腳步 ➡️")
+        hudRootLayout?.addView(tvRightAlert)
 
-        // --- 底部目標導引列 ---
-        val bottomMissionPanel = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#99141414"))
-            setPadding(30, 15, 30, 15)
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(650, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        // --- 3. 正前方螢幕指標 (頂部中央) ---
+        tvCenterAlert = createDirectionBox(Gravity.TOP or Gravity.CENTER_HORIZONTAL, "⬆️ 正前方：無腳步")
+        hudRootLayout?.addView(tvCenterAlert)
+
+        // --- 4. 底部綜合狀態總覽 ---
+        tvStatusOverview = TextView(context).apply {
+            text = "🍉 西瓜腳步雷達 | 專注於玩家與人機腳步/靜步偵測"
+            setTextColor(Color.parseColor("#00E676"))
+            textSize = 10.5f
+            setBackgroundColor(Color.parseColor("#CC141414"))
+            setPadding(25, 10, 25, 10)
+            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                setMargins(0, 0, 0, 40)
+                setMargins(0, 0, 0, 30)
             }
         }
-        tvMission = addLabel(bottomMissionPanel, "🎯 目標：等待遊戲對局開始...", Color.parseColor("#00E676"), 11f, true)
-        hudRootLayout?.addView(bottomMissionPanel)
+        hudRootLayout?.addView(tvStatusOverview)
 
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -181,7 +161,7 @@ class CaptureService : Service() {
                 mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
                 if (mediaProjection != null) {
                     isRunning = true
-                    initScreenCaptureAndAnalysis()
+                    initScreenCaptureDummy()
                     initGameAudioCapture(mediaProjection!!)
                 }
             }
@@ -189,35 +169,21 @@ class CaptureService : Service() {
         return START_STICKY
     }
 
-    private fun initScreenCaptureAndAnalysis() {
+    private fun initScreenCaptureDummy() {
         try {
             val width = 1280
             val height = 720
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
             virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "WatermelonScreenCapture",
+                "WatermelonFootstepDisplay",
                 width, height, 300,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader?.surface, null, null
             )
-
-            val handler = Handler(Looper.getMainLooper())
-
             imageReader?.setOnImageAvailableListener({ reader ->
                 val image = reader.acquireLatestImage()
-                if (image != null) {
-                    try {
-                        handler.post {
-                            tvScreenDetect?.text = "畫面偵測：已連線擷取 (1280x720)"
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    } finally {
-                        image.close()
-                    }
-                }
+                image?.close()
             }, null)
-
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -248,6 +214,7 @@ class CaptureService : Service() {
 
             audioRecord?.startRecording()
 
+            // 專注於腳步與靜步的即時偵測執行緒
             Thread {
                 val buffer = ByteArray(minBufferSize)
                 val handler = Handler(Looper.getMainLooper())
@@ -256,26 +223,77 @@ class CaptureService : Service() {
                     if (readSize > 0) {
                         var leftSum = 0L
                         var rightSum = 0L
+                        var totalEnergy = 0L
                         var i = 0
                         while (i < readSize - 4) {
                             val leftSample = (buffer[i].toInt() or (buffer[i + 1].toInt() shl 8)).toShort()
                             val rightSample = (buffer[i + 2].toInt() or (buffer[i + 3].toInt() shl 8)).toShort()
-                            leftSum += abs(leftSample.toInt())
-                            rightSum += abs(rightSample.toInt())
+                            val lVal = abs(leftSample.toInt())
+                            val rVal = abs(rightSample.toInt())
+                            leftSum += lVal
+                            rightSum += rVal
+                            totalEnergy += (lVal + rVal)
                             i += 4
                         }
 
+                        val avgEnergy = totalEnergy / (readSize / 4)
+
                         handler.post {
-                            if (leftSum > rightSum * 1.4) {
-                                tvAudioStatus?.text = "內部收音：⚠️ 左側偵測腳步/槍聲"
-                            } else if (rightSum > leftSum * 1.4) {
-                                tvAudioStatus?.text = "內部收音：⚠️ 右側偵測腳步/槍聲"
-                            } else {
-                                tvAudioStatus?.text = "內部收音：遊戲音效監聽中 (🟢)"
+                            when {
+                                avgEnergy in 40..150 -> {
+                                    // 輕微細微聲響：判定為靜步移動
+                                    tvLeftAlert?.text = "⬅️ 左側：靜步移動中"
+                                    tvLeftAlert?.setTextColor(Color.parseColor("#00E676"))
+                                    tvRightAlert?.text = "右側：靜步移動中 ➡️"
+                                    tvRightAlert?.setTextColor(Color.parseColor("#00E676"))
+                                    tvCenterAlert?.text = "⬆️ 正前方：靜步潛行"
+                                    tvCenterAlert?.setTextColor(Color.parseColor("#00E676"))
+                                    tvStatusOverview?.text = "🍉 狀態：周遭有輕微靜步聲"
+                                }
+                                leftSum > rightSum * 1.3 -> {
+                                    // 左側腳步
+                                    tvLeftAlert?.text = "⚠️ ⬅️ 【左側】偵測到腳步聲！"
+                                    tvLeftAlert?.setTextColor(Color.parseColor("#FF5252"))
+                                    tvRightAlert?.text = "右側：無腳步 ➡️"
+                                    tvRightAlert?.setTextColor(Color.WHITE)
+                                    tvCenterAlert?.text = "⬆️ 正前方：無腳步"
+                                    tvCenterAlert?.setTextColor(Color.WHITE)
+                                    tvStatusOverview?.text = "🍉 提示：左側有腳步靠近"
+                                }
+                                rightSum > leftSum * 1.3 -> {
+                                    // 右側腳步
+                                    tvLeftAlert?.text = "⬅️ 左側：無腳步"
+                                    tvLeftAlert?.setTextColor(Color.WHITE)
+                                    tvRightAlert?.text = "【右側】偵測到腳步聲！ ➡️"
+                                    tvRightAlert?.setTextColor(Color.parseColor("#FF5252"))
+                                    tvCenterAlert?.text = "⬆️ 正前方：無腳步"
+                                    tvCenterAlert?.setTextColor(Color.WHITE)
+                                    tvStatusOverview?.text = "🍉 提示：右側有腳步靠近"
+                                }
+                                avgEnergy > 150 -> {
+                                    // 左右平衡且音量較大：正前方腳步或奔跑
+                                    tvLeftAlert?.text = "⬅️ 左側"
+                                    tvLeftAlert?.setTextColor(Color.WHITE)
+                                    tvRightAlert?.text = "右側 ➡️"
+                                    tvRightAlert?.setTextColor(Color.WHITE)
+                                    tvCenterAlert?.text = "⚠️ ⬆️ 【正前方】偵測到腳步聲！"
+                                    tvCenterAlert?.setTextColor(Color.parseColor("#FFD700"))
+                                    tvStatusOverview?.text = "🍉 提示：正前方有腳步靠近"
+                                }
+                                else -> {
+                                    // 安靜無聲
+                                    tvLeftAlert?.text = "⬅️ 左側：無腳步"
+                                    tvLeftAlert?.setTextColor(Color.WHITE)
+                                    tvRightAlert?.text = "右側：無腳步 ➡️"
+                                    tvRightAlert?.setTextColor(Color.WHITE)
+                                    tvCenterAlert?.text = "⬆️ 正前方：無腳步"
+                                    tvCenterAlert?.setTextColor(Color.WHITE)
+                                    tvStatusOverview?.text = "🍉 狀態：環境安靜 (監聽中)"
+                                }
                             }
                         }
                     }
-                    Thread.sleep(150)
+                    Thread.sleep(80)
                 }
             }.start()
 
