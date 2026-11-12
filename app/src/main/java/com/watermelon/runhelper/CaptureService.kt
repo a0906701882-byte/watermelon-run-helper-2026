@@ -48,7 +48,7 @@ class CaptureService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
         const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
-        private const val CHANNEL_ID = "WatermelonFootstepChannel"
+        private const val CHANNEL_ID = "WatermelonAntiSelfRadar"
         private const val NOTIFICATION_ID = 1
     }
 
@@ -60,15 +60,15 @@ class CaptureService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "西瓜純腳步聲納雷達",
+                "西瓜防自我干擾聲納雷達",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
 
             val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("🍉 西瓜純腳步聲納雷達")
-                .setContentText("左右及正前方腳步與靜步監聽中...")
+                .setContentTitle("🍉 西瓜防自我干擾雷達")
+                .setContentText("已啟用過濾自身動作・專注敵方腳步中...")
                 .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .build()
 
@@ -85,43 +85,40 @@ class CaptureService : Service() {
             )
         }
 
-        fun createDirectionBox(gravity: Int, text: String): TextView {
+        fun createLargeDirectionBox(gravity: Int, text: String): TextView {
             return TextView(context).apply {
                 this.text = text
                 setTextColor(Color.WHITE)
-                textSize = 13f
+                textSize = 20f
                 setTypeface(null, android.graphics.Typeface.BOLD)
-                setBackgroundColor(Color.parseColor("#B3141414"))
-                setPadding(20, 15, 20, 15)
+                setBackgroundColor(Color.parseColor("#CC141414"))
+                setPadding(30, 22, 30, 22)
                 layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     this.gravity = gravity
-                    setMargins(35, 35, 35, 35)
+                    setMargins(45, 45, 45, 45)
                 }
             }
         }
 
-        // --- 1. 左側螢幕指標 ---
-        tvLeftAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.START, "⬅️ 左側：無腳步")
+        tvLeftAlert = createLargeDirectionBox(Gravity.CENTER_VERTICAL or Gravity.START, "⬅️ 左側：無腳步")
         hudRootLayout?.addView(tvLeftAlert)
 
-        // --- 2. 右側螢幕指標 ---
-        tvRightAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.END, "右側：無腳步 ➡️")
+        tvRightAlert = createLargeDirectionBox(Gravity.CENTER_VERTICAL or Gravity.END, "右側：無腳步 ➡️")
         hudRootLayout?.addView(tvRightAlert)
 
-        // --- 3. 正前方螢幕指標 (頂部中央) ---
-        tvCenterAlert = createDirectionBox(Gravity.TOP or Gravity.CENTER_HORIZONTAL, "⬆️ 正前方：無腳步")
+        tvCenterAlert = createLargeDirectionBox(Gravity.TOP or Gravity.CENTER_HORIZONTAL, "⬆️ 正前方：無腳步")
         hudRootLayout?.addView(tvCenterAlert)
 
-        // --- 4. 底部綜合狀態總覽 ---
         tvStatusOverview = TextView(context).apply {
-            text = "🍉 西瓜腳步雷達 | 專注於玩家與人機腳步/靜步偵測"
+            text = "🍉 防自我干擾模式 | 已自動忽略自身移動音訊"
             setTextColor(Color.parseColor("#00E676"))
-            textSize = 10.5f
+            textSize = 14f
+            setTypeface(null, android.graphics.Typeface.BOLD)
             setBackgroundColor(Color.parseColor("#CC141414"))
-            setPadding(25, 10, 25, 10)
+            setPadding(35, 15, 35, 15)
             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                setMargins(0, 0, 0, 30)
+                setMargins(0, 0, 0, 40)
             }
         }
         hudRootLayout?.addView(tvStatusOverview)
@@ -175,7 +172,7 @@ class CaptureService : Service() {
             val height = 720
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
             virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "WatermelonFootstepDisplay",
+                "WatermelonAntiSelfDisplay",
                 width, height, 300,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader?.surface, null, null
@@ -214,10 +211,11 @@ class CaptureService : Service() {
 
             audioRecord?.startRecording()
 
-            // 專注於腳步與靜步的即時偵測執行緒
             Thread {
                 val buffer = ByteArray(minBufferSize)
                 val handler = Handler(Looper.getMainLooper())
+                var baselineNoise = 100L
+
                 while (isRunning) {
                     val readSize = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                     if (readSize > 0) {
@@ -225,6 +223,7 @@ class CaptureService : Service() {
                         var rightSum = 0L
                         var totalEnergy = 0L
                         var i = 0
+                        
                         while (i < readSize - 4) {
                             val leftSample = (buffer[i].toInt() or (buffer[i + 1].toInt() shl 8)).toShort()
                             val rightSample = (buffer[i + 2].toInt() or (buffer[i + 3].toInt() shl 8)).toShort()
@@ -236,64 +235,72 @@ class CaptureService : Service() {
                             i += 4
                         }
 
-                        val avgEnergy = totalEnergy / (readSize / 4)
+                        val sampleCount = (readSize / 4).coerceAtLeast(1)
+                        val avgEnergy = totalEnergy / sampleCount
+                        val lAvg = leftSum / sampleCount
+                        val rAvg = rightSum / sampleCount
+
+                        baselineNoise = (baselineNoise * 0.95 + avgEnergy * 0.05).toLong()
+                        val dynamicThreshold = baselineNoise + 40L
+
+                        // 判斷是否為「自己動作」（當左右聲道能量同時暴增且比例非常接近時，代表聲音來自正中央玩家視角或自身操作）
+                        val isSelfAction = abs(lAvg - rAvg) < (lAvg * 0.25) && avgEnergy > dynamicThreshold + 50
 
                         handler.post {
                             when {
-                                avgEnergy in 40..150 -> {
-                                    // 輕微細微聲響：判定為靜步移動
-                                    tvLeftAlert?.text = "⬅️ 左側：靜步移動中"
+                                isSelfAction -> {
+                                    // 偵測到自身動作，直接過濾顯示安全，不發出敵方警報
+                                    tvLeftAlert?.text = "⬅️ 左側：無敵方腳步"
+                                    tvLeftAlert?.setTextColor(Color.WHITE)
+                                    tvRightAlert?.text = "右側：無敵方腳步 ➡️"
+                                    tvRightAlert?.setTextColor(Color.WHITE)
+                                    tvCenterAlert?.text = "⬆️ 正前方：自身動作過濾中"
+                                    tvCenterAlert?.setTextColor(Color.parseColor("#00B0FF"))
+                                    tvStatusOverview?.text = "🍉 狀態：正在移動/操作 (已過濾自身聲音)"
+                                }
+                                avgEnergy in (baselineNoise + 15)..(baselineNoise + 50) -> {
+                                    // 外部靜步
+                                    tvLeftAlert?.text = "⬅️ 左側：靜步潛行中"
                                     tvLeftAlert?.setTextColor(Color.parseColor("#00E676"))
-                                    tvRightAlert?.text = "右側：靜步移動中 ➡️"
+                                    tvRightAlert?.text = "右側：靜步潛行中 ➡️"
                                     tvRightAlert?.setTextColor(Color.parseColor("#00E676"))
                                     tvCenterAlert?.text = "⬆️ 正前方：靜步潛行"
                                     tvCenterAlert?.setTextColor(Color.parseColor("#00E676"))
-                                    tvStatusOverview?.text = "🍉 狀態：周遭有輕微靜步聲"
+                                    tvStatusOverview?.text = "🍉 狀態：捕捉到周遭敵方靜步"
                                 }
-                                leftSum > rightSum * 1.3 -> {
-                                    // 左側腳步
-                                    tvLeftAlert?.text = "⚠️ ⬅️ 【左側】偵測到腳步聲！"
+                                lAvg > rAvg * 1.5 && lAvg > dynamicThreshold -> {
+                                    // 嚴格過濾後的左側敵方腳步
+                                    tvLeftAlert?.text = "⚠️ ⬅️ 【左側】敵方腳步接近！"
                                     tvLeftAlert?.setTextColor(Color.parseColor("#FF5252"))
-                                    tvRightAlert?.text = "右側：無腳步 ➡️"
+                                    tvRightAlert?.text = "右側：安全 ➡️"
                                     tvRightAlert?.setTextColor(Color.WHITE)
-                                    tvCenterAlert?.text = "⬆️ 正前方：無腳步"
+                                    tvCenterAlert?.text = "⬆️ 正前方：安全"
                                     tvCenterAlert?.setTextColor(Color.WHITE)
-                                    tvStatusOverview?.text = "🍉 提示：左側有腳步靠近"
+                                    tvStatusOverview?.text = "🍉 鎖定：左側有敵人接近"
                                 }
-                                rightSum > leftSum * 1.3 -> {
-                                    // 右側腳步
-                                    tvLeftAlert?.text = "⬅️ 左側：無腳步"
+                                rAvg > lAvg * 1.5 && rAvg > dynamicThreshold -> {
+                                    // 嚴格過濾後的右側敵方腳步
+                                    tvLeftAlert?.text = "⬅️ 左側：安全"
                                     tvLeftAlert?.setTextColor(Color.WHITE)
-                                    tvRightAlert?.text = "【右側】偵測到腳步聲！ ➡️"
+                                    tvRightAlert?.text = "【右側】敵方腳步接近！ ➡️"
                                     tvRightAlert?.setTextColor(Color.parseColor("#FF5252"))
-                                    tvCenterAlert?.text = "⬆️ 正前方：無腳步"
+                                    tvCenterAlert?.text = "⬆️ 正前方：安全"
                                     tvCenterAlert?.setTextColor(Color.WHITE)
-                                    tvStatusOverview?.text = "🍉 提示：右側有腳步靠近"
-                                }
-                                avgEnergy > 150 -> {
-                                    // 左右平衡且音量較大：正前方腳步或奔跑
-                                    tvLeftAlert?.text = "⬅️ 左側"
-                                    tvLeftAlert?.setTextColor(Color.WHITE)
-                                    tvRightAlert?.text = "右側 ➡️"
-                                    tvRightAlert?.setTextColor(Color.WHITE)
-                                    tvCenterAlert?.text = "⚠️ ⬆️ 【正前方】偵測到腳步聲！"
-                                    tvCenterAlert?.setTextColor(Color.parseColor("#FFD700"))
-                                    tvStatusOverview?.text = "🍉 提示：正前方有腳步靠近"
+                                    tvStatusOverview?.text = "🍉 鎖定：右側有敵人接近"
                                 }
                                 else -> {
-                                    // 安靜無聲
                                     tvLeftAlert?.text = "⬅️ 左側：無腳步"
                                     tvLeftAlert?.setTextColor(Color.WHITE)
                                     tvRightAlert?.text = "右側：無腳步 ➡️"
                                     tvRightAlert?.setTextColor(Color.WHITE)
                                     tvCenterAlert?.text = "⬆️ 正前方：無腳步"
                                     tvCenterAlert?.setTextColor(Color.WHITE)
-                                    tvStatusOverview?.text = "🍉 狀態：環境安靜 (監聽中)"
+                                    tvStatusOverview?.text = "🍉 狀態：雷達監聽中 (防自我干擾啟用)"
                                 }
                             }
                         }
                     }
-                    Thread.sleep(80)
+                    Thread.sleep(60)
                 }
             }.start()
 
