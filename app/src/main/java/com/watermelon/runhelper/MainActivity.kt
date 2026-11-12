@@ -6,9 +6,8 @@ import android.media.projection.MediaProjectionManager
 import android.os.Bundle
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
 
     companion object {
         const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
@@ -21,7 +20,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 動態生成簡單的主畫面，避免依賴不存在的 XML 佈局
+        // 動態生成簡單的主畫面，不依賴任何 XML 與 AppCompat 主題
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(50, 50, 50, 50)
@@ -32,7 +31,6 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(layout)
 
-        // 修正：正確使用 Context.MEDIA_PROJECTION_SERVICE
         mediaProjectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
         val captureIntent = mediaProjectionManager?.createScreenCaptureIntent()
