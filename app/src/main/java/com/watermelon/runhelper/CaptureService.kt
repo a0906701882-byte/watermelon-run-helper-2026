@@ -33,7 +33,6 @@ class CaptureService : Service() {
     private var windowManager: WindowManager? = null
     private var hudRootLayout: FrameLayout? = null
 
-    // 只保留色塊指標，不顯示文字
     private var viewLeft: TextView? = null
     private var viewRight: TextView? = null
     private var viewCenter: TextView? = null
@@ -84,8 +83,19 @@ class CaptureService : Service() {
             )
         }
 
-        // 建立半透明無文字的色塊指標 (寬高設定成明顯的條狀或方塊)
         fun createLightBox(gravity: Int, width: Int, height: Int): TextView {
             return TextView(context).apply {
-                text = "" // 完全不顯示文字
-                setBackgroundColor(Color.parseColor("#66141414")) // 半
+                text = ""
+                setBackgroundColor(Color.parseColor("#66141414"))
+                layoutParams = FrameLayout.LayoutParams(width, height).apply {
+                    this.gravity = gravity
+                    setMargins(30, 30, 30, 30)
+                } // <--- 補回這裡漏掉的括號
+            }
+        }
+
+        viewLeft = createLightBox(Gravity.CENTER_VERTICAL or Gravity.START, 35, 180)
+        hudRootLayout?.addView(viewLeft)
+
+        viewRight = createLightBox(Gravity.CENTER_VERTICAL or Gravity.END, 35, 180)
+        hudRootLayout?.addView
