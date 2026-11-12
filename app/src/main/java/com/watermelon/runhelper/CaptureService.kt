@@ -189,7 +189,6 @@ class CaptureService : Service() {
         return START_STICKY
     }
 
-    // 核心：即時畫面擷取與像素分析
     private fun initScreenCaptureAndAnalysis() {
         try {
             val width = 1280
@@ -202,27 +201,19 @@ class CaptureService : Service() {
                 imageReader?.surface, null, null
             )
 
-            val handler = Handler(Looper.getMainConLooper() ?: Looper.getMainLooper())
+            val handler = Handler(Looper.getMainLooper())
 
             imageReader?.setOnImageAvailableListener({ reader ->
                 val image = reader.acquireLatestImage()
                 if (image != null) {
                     try {
-                        // 取得畫面的像素平面資料
-                        val planes = image.planes
-                        val buffer = planes[0].buffer
-                        val pixelStride = planes[0].pixelStride
-                        val rowStride = planes[0].rowStride
-
-                        // 簡單範例：抽樣檢查畫面特定區域的顏色或亮度
-                        // 當畫面有變動時，更新 UI 狀態顯示「偵測中 (🟢)」
                         handler.post {
-                            tvScreenStatus?.text = "畫面偵測：已連線擷取 (解析度 1280x720)"
+                            tvScreenDetect?.text = "畫面偵測：已連線擷取 (1280x720)"
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
                     } finally {
-                        image.close() // 務必關閉釋放，否則畫面會卡住
+                        image.close()
                     }
                 }
             }, null)
@@ -257,7 +248,6 @@ class CaptureService : Service() {
 
             audioRecord?.startRecording()
 
-            // 腳步與方位即時監聽執行緒
             Thread {
                 val buffer = ByteArray(minBufferSize)
                 val handler = Handler(Looper.getMainLooper())
