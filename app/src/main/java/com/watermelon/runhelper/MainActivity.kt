@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Bundle
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
@@ -18,11 +20,21 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
 
-        mediaProjectionManager = getSystemService(MEDIA_PROJECTION_MANAGER) as MediaProjectionManager
+        // 動態生成簡單的主畫面，避免依賴不存在的 XML 佈局
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(50, 50, 50, 50)
+            addView(TextView(this@MainActivity).apply {
+                text = "🍉 西瓜跑刀助手運行中...\n請允許螢幕與內部收音授權以啟動戰術懸浮窗。"
+                textSize = 16f
+            })
+        }
+        setContentView(layout)
 
-        // 自動請求螢幕與內部音訊擷取授權 (MediaProjection)
+        // 修正：正確使用 Context.MEDIA_PROJECTION_SERVICE
+        mediaProjectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+
         val captureIntent = mediaProjectionManager?.createScreenCaptureIntent()
         if (captureIntent != null) {
             startActivityForResult(captureIntent, REQUEST_CODE_SCREEN_CAPTURE)
@@ -32,7 +44,6 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_CODE_SCREEN_CAPTURE && resultCode == Activity.RESULT_OK && data != null) {
-            // 授權成功後，啟動 CaptureService 並將授權結果傳過去
             val serviceIntent = Intent(this, CaptureService::class.java).apply {
                 putExtra(EXTRA_RESULT_CODE, resultCode)
                 putExtra(EXTRA_RESULT_DATA, data)
