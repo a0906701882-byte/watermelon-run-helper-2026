@@ -26,6 +26,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import java.nio.ByteBuffer
 import kotlin.math.abs
 
 class CaptureService : Service() {
@@ -33,9 +34,9 @@ class CaptureService : Service() {
     private var windowManager: WindowManager? = null
     private var hudRootLayout: FrameLayout? = null
 
-    private var viewLeft: TextView? = null
-    private var viewRight: TextView? = null
-    private var viewCenter: TextView? = null
+    private var tvLeftAlert: TextView? = null
+    private var tvRightAlert: TextView? = null
+    private var tvCenterAlert: TextView? = null
 
     private var audioRecord: AudioRecord? = null
     private var mediaProjection: MediaProjection? = null
@@ -43,10 +44,13 @@ class CaptureService : Service() {
     private var imageReader: ImageReader? = null
     private var isRunning = false
 
+    private var previousPixelSample: ByteArray? = null
+    @Volatile private var isScreenMoving = false
+
     companion object {
         const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
         const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
-        private const val CHANNEL_ID = "WatermelonLightRadar"
+        private const val CHANNEL_ID = "WatermelonTextRadar"
         private const val NOTIFICATION_ID = 1
     }
 
@@ -58,15 +62,15 @@ class CaptureService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "西瓜聲納光條雷達",
+                "西瓜視訊聯防文字雷達",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
 
             val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("🍉 西瓜聲納光條雷達")
-                .setContentText("無文字半透明戰術模式運行中...")
+                .setContentTitle("🍉 西瓜視訊聯防文字雷達")
+                .setContentText("動態過濾與精準方位提示運行中...")
                 .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .build()
 
@@ -83,39 +87,29 @@ class CaptureService : Service() {
             )
         }
 
-        // 建立半透明無文字的色塊指標
-        val leftBox = TextView(context).apply {
-            text = ""
-            setBackgroundColor(Color.parseColor("#66141414"))
-            layoutParams = FrameLayout.LayoutParams(35, 180).apply {
-                gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                setMargins(30, 30, 30, 30)
+        fun createDirectionBox(gravity: Int, text: String): TextView {
+            return TextView(context).apply {
+                this.text = text
+                setTextColor(Color.WHITE)
+                textSize = 20f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setBackgroundColor(Color.parseColor("#99141414"))
+                setPadding(30, 22, 30, 22)
+                layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    this.gravity = gravity
+                    setMargins(45, 45, 45, 45)
+                }
             }
         }
-        viewLeft = leftBox
-        hudRootLayout?.addView(viewLeft)
 
-        val rightBox = TextView(context).apply {
-            text = ""
-            setBackgroundColor(Color.parseColor("#66141414"))
-            layoutParams = FrameLayout.LayoutParams(35, 180).apply {
-                gravity = Gravity.CENTER_VERTICAL or Gravity.END
-                setMargins(30, 30, 30, 30)
-            }
-        }
-        viewRight = rightBox
-        hudRootLayout?.addView(viewRight)
+        tvLeftAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.START, "⬅️ 左側：雷達就緒")
+        hudRootLayout?.addView(tvLeftAlert)
 
-        val centerBox = TextView(context).apply {
-            text = ""
-            setBackgroundColor(Color.parseColor("#66141414"))
-            layoutParams = FrameLayout.LayoutParams(180, 35).apply {
-                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                setMargins(30, 30, 30, 30)
-            }
-        }
-        viewCenter = centerBox
-        hudRootLayout?.addView(viewCenter)
+        tvRightAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.END, "右側：雷達就緒 ➡️")
+        hudRootLayout?.addView(tvRightAlert)
+
+        tvCenterAlert = createDirectionBox(Gravity.TOP or Gravity.CENTER_HORIZONTAL, "⬆️ 正前方：雷達就緒")
+        hudRootLayout?.addView(tvCenterAlert)
 
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -152,7 +146,7 @@ class CaptureService : Service() {
                 mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
                 if (mediaProjection != null) {
                     isRunning = true
-                    initScreenCaptureDummy()
+                    initScreenMotionAnalysis()
                     initGameAudioCapture(mediaProjection!!)
                 }
             }
@@ -160,21 +154,46 @@ class CaptureService : Service() {
         return START_STICKY
     }
 
-    private fun initScreenCaptureDummy() {
+    private fun initScreenMotionAnalysis() {
         try {
-            val width = 1280
-            val height = 720
+            val width = 640
+            val height = 360
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
             virtualDisplay = mediaProjection?.createVirtualDisplay(
-                "WatermelonLightDisplay",
-                width, height, 300,
+                "WatermelonMotionDisplay",
+                width, height, 200,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader?.surface, null, null
             )
+
             imageReader?.setOnImageAvailableListener({ reader ->
                 val image = reader.acquireLatestImage()
-                image?.close()
+                if (image != null) {
+                    try {
+                        val planes = image.planes
+                        val buffer: ByteBuffer = planes[0].buffer
+                        val currentBytes = ByteArray(buffer.remaining())
+                        buffer.get(currentBytes)
+
+                        val prev = previousPixelSample
+                        if (prev != null && prev.size == currentBytes.size) {
+                            var diffSum = 0L
+                            var idx = 0
+                            while (idx < currentBytes.size) {
+                                diffSum += abs(currentBytes[idx] - prev[idx]).toLong()
+                                idx += 16
+                            }
+                            isScreenMoving = diffSum > 150000L
+                        }
+                        previousPixelSample = currentBytes
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    } finally {
+                        image.close()
+                    }
+                }
             }, null)
+
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -208,7 +227,7 @@ class CaptureService : Service() {
             Thread {
                 val buffer = ByteArray(minBufferSize)
                 val handler = Handler(Looper.getMainLooper())
-                var baselineNoise = 100L
+                var baselineNoise = 300L
 
                 while (isRunning) {
                     val readSize = audioRecord?.read(buffer, 0, buffer.size) ?: 0
@@ -234,46 +253,64 @@ class CaptureService : Service() {
                         val lAvg = leftSum / sampleCount
                         val rAvg = rightSum / sampleCount
 
-                        baselineNoise = (baselineNoise * 0.95 + avgEnergy * 0.05).toLong()
-                        val dynamicThreshold = baselineNoise + 40L
-                        val isSelfAction = abs(lAvg - rAvg) < (lAvg * 0.25) && avgEnergy > dynamicThreshold + 50
+                        baselineNoise = (baselineNoise * 0.92 + avgEnergy * 0.08).toLong()
+                        val dynamicThreshold = baselineNoise + 90L
+                        val isSelfMoving = isScreenMoving
 
                         handler.post {
                             when {
-                                isSelfAction -> {
-                                    viewLeft?.setBackgroundColor(Color.parseColor("#3300B0FF"))
-                                    viewRight?.setBackgroundColor(Color.parseColor("#3300B0FF"))
-                                    viewCenter?.setBackgroundColor(Color.parseColor("#3300B0FF"))
+                                isSelfMoving -> {
+                                    tvLeftAlert?.text = "⬅️ 左側：安全"
+                                    tvLeftAlert?.setTextColor(Color.WHITE)
+                                    tvRightAlert?.text = "右側：安全 ➡️"
+                                    tvRightAlert?.setTextColor(Color.WHITE)
+                                    tvCenterAlert?.text = "⬆️ 正前方：移動中 (自身過濾)"
+                                    tvCenterAlert?.setTextColor(Color.parseColor("#00B0FF"))
                                 }
-                                avgEnergy in (baselineNoise + 15)..(baselineNoise + 50) -> {
-                                    viewLeft?.setBackgroundColor(Color.parseColor("#9900E676"))
-                                    viewRight?.setBackgroundColor(Color.parseColor("#9900E676"))
-                                    viewCenter?.setBackgroundColor(Color.parseColor("#9900E676"))
+                                avgEnergy in (baselineNoise + 30)..(baselineNoise + 120) -> {
+                                    tvLeftAlert?.text = "⬅️ 左側：靜步潛行中"
+                                    tvLeftAlert?.setTextColor(Color.parseColor("#00E676"))
+                                    tvRightAlert?.text = "右側：靜步潛行中 ➡️"
+                                    tvRightAlert?.setTextColor(Color.parseColor("#00E676"))
+                                    tvCenterAlert?.text = "⬆️ 正前方：靜步潛行"
+                                    tvCenterAlert?.setTextColor(Color.parseColor("#00E676"))
                                 }
-                                lAvg > rAvg * 1.5 && lAvg > dynamicThreshold -> {
-                                    viewLeft?.setBackgroundColor(Color.parseColor("#CCFF5252"))
-                                    viewRight?.setBackgroundColor(Color.parseColor("#33141414"))
-                                    viewCenter?.setBackgroundColor(Color.parseColor("#33141414"))
+                                lAvg > rAvg * 1.6 && lAvg > dynamicThreshold -> {
+                                    tvLeftAlert?.text = "⚠️ ⬅️ 【左側】敵方腳步！"
+                                    tvLeftAlert?.setTextColor(Color.parseColor("#FF5252"))
+                                    tvRightAlert?.text = "右側：安全 ➡️"
+                                    tvRightAlert?.setTextColor(Color.WHITE)
+                                    tvCenterAlert?.text = "⬆️ 正前方：安全"
+                                    tvCenterAlert?.setTextColor(Color.WHITE)
                                 }
-                                rAvg > lAvg * 1.5 && rAvg > dynamicThreshold -> {
-                                    viewLeft?.setBackgroundColor(Color.parseColor("#33141414"))
-                                    viewRight?.setBackgroundColor(Color.parseColor("#CCFF5252"))
-                                    viewCenter?.setBackgroundColor(Color.parseColor("#33141414"))
+                                rAvg > lAvg * 1.6 && rAvg > dynamicThreshold -> {
+                                    tvLeftAlert?.text = "⬅️ 左側：安全"
+                                    tvLeftAlert?.setTextColor(Color.WHITE)
+                                    tvRightAlert?.text = "【右側】敵方腳步！ ➡️"
+                                    tvRightAlert?.setTextColor(Color.parseColor("#FF5252"))
+                                    tvCenterAlert?.text = "⬆️ 正前方：安全"
+                                    tvCenterAlert?.setTextColor(Color.WHITE)
                                 }
-                                avgEnergy > dynamicThreshold + 40 -> {
-                                    viewLeft?.setBackgroundColor(Color.parseColor("#33141414"))
-                                    viewRight?.setBackgroundColor(Color.parseColor("#33141414"))
-                                    viewCenter?.setBackgroundColor(Color.parseColor("#CCFFD700"))
+                                avgEnergy > dynamicThreshold + 90 -> {
+                                    tvLeftAlert?.text = "⬅️ 左側"
+                                    tvLeftAlert?.setTextColor(Color.WHITE)
+                                    tvRightAlert?.text = "右側 ➡️"
+                                    tvRightAlert?.setTextColor(Color.WHITE)
+                                    tvCenterAlert?.text = "⚠️ ⬆️ 【正前方】敵方腳步！"
+                                    tvCenterAlert?.setTextColor(Color.parseColor("#FFD700"))
                                 }
                                 else -> {
-                                    viewLeft?.setBackgroundColor(Color.parseColor("#66141414"))
-                                    viewRight?.setBackgroundColor(Color.parseColor("#66141414"))
-                                    viewCenter?.setBackgroundColor(Color.parseColor("#66141414"))
+                                    tvLeftAlert?.text = "⬅️ 左側：無腳步"
+                                    tvLeftAlert?.setTextColor(Color.WHITE)
+                                    tvRightAlert?.text = "右側：無腳步 ➡️"
+                                    tvRightAlert?.setTextColor(Color.WHITE)
+                                    tvCenterAlert?.text = "⬆️ 正前方：無腳步"
+                                    tvCenterAlert?.setTextColor(Color.WHITE)
                                 }
                             }
                         }
                     }
-                    Thread.sleep(60)
+                    Thread.sleep(50)
                 }
             }.start()
 
