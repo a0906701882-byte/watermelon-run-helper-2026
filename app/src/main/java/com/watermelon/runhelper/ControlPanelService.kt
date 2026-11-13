@@ -47,6 +47,7 @@ class ControlPanelService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val context = this
 
+        // ✅ 正確引用 CaptureService 的常數
         val filter = IntentFilter(CaptureService.ACTION_UPDATE_TACTICAL_DATA)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(tacticalReceiver, filter, RECEIVER_NOT_EXPORTED)
@@ -54,7 +55,7 @@ class ControlPanelService : Service() {
             registerReceiver(tacticalReceiver, filter)
         }
 
-        // 左側戰術主面板容器（極簡無座標版）
+        // 左側戰術面板容器
         panelLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
@@ -72,7 +73,7 @@ class ControlPanelService : Service() {
 
         // 1. 頂部品牌標題
         val tvTitle = TextView(context).apply {
-            text = "🍉 西瓜護航助手\n     · DELTA FORCE"
+            text = "🍉 西瓜跑刀助手\n     · DELTA FORCE"
             setTextColor(Color.parseColor("#FFEA00"))
             textSize = 13f
             setTypeface(null, android.graphics.Typeface.BOLD)
@@ -81,9 +82,9 @@ class ControlPanelService : Service() {
         }
         panelLayout?.addView(tvTitle)
 
-        // 2. 撤離時間倒數與提醒區塊（已移除玩家座標）
+        // 2. 撤離倒數計時與 6 分半提醒
         tvExtraction = TextView(context).apply {
-            text = "⏱️ 撤離倒數：進行中 (安全)"
+            text = "⏱️ 撤離倒數：進行中"
             setTextColor(Color.parseColor("#FF5555"))
             textSize = 11f
             setLineSpacing(3f, 1f)
