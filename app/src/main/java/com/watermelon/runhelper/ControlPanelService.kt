@@ -15,6 +15,7 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -22,14 +23,14 @@ class ControlPanelService : Service() {
 
     private var windowManager: WindowManager? = null
     
-    // 1. 控制面板視窗與元件
+    // 1. 放大版的控制面板
     private var panelLayout: LinearLayout? = null
     private lateinit var tvExtraction: TextView
     private var scaleGestureDetector: ScaleGestureDetector? = null
-    private var currentScale = 1.0f
+    private var currentScale = 1.15f // 預設稍微放大
 
-    // 2. 獨立的前後左右方位指示視窗與元件
-    private var radarLayout: LinearLayout? = null
+    // 2. 鋪滿全螢幕四周的前後左右雷達指示器
+    private var screenRadarLayout: FrameLayout? = null
     private lateinit var tvFront: TextView
     private lateinit var tvBack: TextView
     private lateinit var tvLeft: TextView
@@ -41,14 +42,13 @@ class ControlPanelService : Service() {
                 val extraction = intent.getStringExtra("extraction")
                 val activeDir = intent.getIntExtra("direction", -1)
 
-                // 更新面板上的撤離時間
                 tvExtraction.text = extraction
 
-                // 更新獨立雷達指示器的燈號
-                val defaultBg = Color.parseColor("#99000000")
-                val alertBg = Color.parseColor("#CCFF3333")
+                // 更新全螢幕四周的方位燈號
+                val defaultBg = Color.parseColor("#88000000")
+                val alertBg = Color.parseColor("#E6FF3333") // 亮紅警報
                 val alertText = Color.parseColor("#FFFFFF")
-                val defaultText = Color.parseColor("#888888")
+                val defaultText = Color.parseColor("#AAAAAA")
 
                 tvFront.setBackgroundColor(if (activeDir == 0) alertBg else defaultBg)
                 tvFront.setTextColor(if (activeDir == 0) alertText else defaultText)
@@ -85,35 +85,39 @@ class ControlPanelService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // ==================== A. 建立左側控制面板（純面板，支援等比縮放） ====================
+        // ==================== A. 放大版的左側控制面板 ====================
         panelLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 16f
-                setColor(Color.parseColor("#D90A0A0A"))
-                setStroke(2, Color.parseColor("#FFEA00"))
+                cornerRadius = 20f
+                setColor(Color.parseColor("#E60A0A0A"))
+                setStroke(3, Color.parseColor("#FFEA00"))
             }
-            setPadding(16, 14, 16, 14)
+            setPadding(24, 20, 24, 20)
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
+            scaleX = currentScale
+            scaleY = currentScale
+            pivotX = 0f
+            pivotY = 0f
         }
 
         val tvTitle = TextView(context).apply {
             text = "🍉 西瓜跑刀助手"
             setTextColor(Color.parseColor("#FFEA00"))
-            textSize = 12f
+            textSize = 15f
             setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(0, 0, 0, 6)
+            setPadding(0, 0, 0, 8)
         }
         panelLayout?.addView(tvTitle)
 
         tvExtraction = TextView(context).apply {
             text = "⏱️ 撤離倒數：進行中"
             setTextColor(Color.parseColor("#FF5555"))
-            textSize = 10f
+            textSize = 13f
         }
         panelLayout?.addView(tvExtraction)
 
@@ -130,12 +134,10 @@ class ControlPanelService : Service() {
             y = 100
         }
 
-        // 雙指等比例縮放控制面板
         scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 currentScale *= detector.scaleFactor
-                currentScale = currentScale.coerceIn(0.6f, 2.2f)
-                // 保持等比例縮放 (Pivot 設在左上角讓縮放基準穩定)
+                currentScale = currentScale.coerceIn(0.8f, 2.5f)
                 panelLayout?.pivotX = 0f
                 panelLayout?.pivotY = 0f
                 panelLayout?.scaleX = currentScale
@@ -144,7 +146,6 @@ class ControlPanelService : Service() {
             }
         })
 
-        // 單指拖曳面板
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
@@ -172,73 +173,89 @@ class ControlPanelService : Service() {
         }
 
 
-        // ==================== B. 建立獨立的前後左右雷達指示器（不在面板內） ====================
-        radarLayout = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
+        // ==================== B. 鋪滿全螢幕四周的前後左右雷達指示器 ====================
+        screenRadarLayout = FrameLayout(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
         }
 
-        tvFront = createDirectionLabel(context, "⬆️ 前方")
-        radarLayout?.addView(tvFront)
-
-        val middleRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+        // 1. 前方（置頂中央）
+        tvFront = createFullScreenDirectionLabel(context, "⬆️ 前方敵方動靜").apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                topMargin = 30
+            }
         }
-        tvLeft = createDirectionLabel(context, "⬅️ 左側")
-        tvRight = createDirectionLabel(context, "➡️ 右側")
-        
-        val tvCenterDot = TextView(context).apply {
-            text = " 🎯 "
-            textSize = 10f
-            setTextColor(Color.parseColor("#FFEA00"))
+        screenRadarLayout?.addView(tvFront)
+
+        // 2. 後方（置底中央）
+        tvBack = createFullScreenDirectionLabel(context, "⬇️ 後方敵方動靜").apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                bottomMargin = 30
+            }
         }
+        screenRadarLayout?.addView(tvBack)
 
-        middleRow.addView(tvLeft)
-        middleRow.addView(tvCenterDot)
-        middleRow.addView(tvRight)
-        radarLayout?.addView(middleRow)
+        // 3. 左側（置左垂直置中）
+        tvLeft = createFullScreenDirectionLabel(context, "⬅️ 左側").apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                leftMargin = 20
+            }
+        }
+        screenRadarLayout?.addView(tvLeft)
 
-        tvBack = createDirectionLabel(context, "⬇️ 後方")
-        radarLayout?.addView(tvBack)
+        // 4. 右側（置右垂直置中）
+        tvRight = createFullScreenDirectionLabel(context, "➡️ 右側").apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                rightMargin = 20
+            }
+        }
+        screenRadarLayout?.addView(tvRight)
 
-        val radarParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+        val screenRadarParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, // 不干擾觸控
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, // 全螢幕穿透觸控，不擋遊戲
             PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.END // 放在畫另一側或適當位置（例如右上方或螢幕中央）
-            x = 80
-            y = 120
-        }
+        )
 
-        // 將兩個視窗分別加入 WindowManager
         try {
             windowManager?.addView(panelLayout, panelParams)
-            windowManager?.addView(radarLayout, radarParams)
+            windowManager?.addView(screenRadarLayout, screenRadarParams)
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    private fun createDirectionLabel(context: Context, text: String): TextView {
+    private fun createFullScreenDirectionLabel(context: Context, text: String): TextView {
         return TextView(context).apply {
             this.text = text
-            setTextColor(Color.parseColor("#888888"))
-            textSize = 11f
+            setTextColor(Color.parseColor("#AAAAAA"))
+            textSize = 14f
+            setTypeface(null, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#99000000"))
-            setPadding(10, 4, 10, 4)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                setMargins(2, 2, 2, 2)
-            }
+            setBackgroundColor(Color.parseColor("#88000000"))
+            setPadding(18, 10, 18, 10)
         }
     }
 
@@ -253,9 +270,9 @@ class ControlPanelService : Service() {
             windowManager?.removeView(panelLayout)
             panelLayout = null
         }
-        if (radarLayout != null) {
-            windowManager?.removeView(radarLayout)
-            radarLayout = null
+        if (screenRadarLayout != null) {
+            windowManager?.removeView(screenRadarLayout)
+            screenRadarLayout = null
         }
     }
 }
