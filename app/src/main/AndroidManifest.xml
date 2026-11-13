@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 必要的懸浮窗與背景權限 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <application
         android:allowBackup="true"
-        android:label="西瓜電競雷達"
+        android:icon="@mipmap/ic_launcher"
+        android:label="西瓜跑刀助手"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.NoActionBar">
+        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
 
         <activity
             android:name=".MainActivity"
@@ -21,15 +23,14 @@
             </intent-filter>
         </activity>
 
-        <!-- 宣告兩個背景服務 -->
         <service
-            android:name=".ControlPanelService"
+            android:name=".CaptureService"
+            android:foregroundServiceType="microphone"
             android:exported="false" />
 
         <service
-            android:name=".CaptureService"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:name=".ControlPanelService"
+            android:exported="false" />
 
     </application>
 
