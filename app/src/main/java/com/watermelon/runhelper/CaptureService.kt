@@ -78,14 +78,12 @@ class CaptureService : Service() {
                         // 動態底噪校準（過濾自身移動雜訊）
                         baselineNoise = baselineNoise * 0.95 + currentAmplitude * 0.05
 
-                        // 只有高於底噪且符合外來腳步區間才觸發方位
                         if (currentAmplitude > baselineNoise * 1.4 && currentAmplitude in 1400.0..4800.0) {
                             counter++
                             activeDirection = counter % 4
                         }
                     }
 
-                    // 廣播資料
                     val broadcastIntent = Intent(ACTION_UPDATE_TACTICAL_DATA).apply {
                         putExtra("extraction", extractionAlert)
                         putExtra("direction", activeDirection)
