@@ -30,14 +30,13 @@ class ControlPanelService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val context = this
 
-        // 輕量化戰術控制面板主體（降低半透明疊加與邊框粗細）
         panelLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 12f
-                setColor(Color.parseColor("#B30A0A0A")) // 沉浸式戰術黑，減輕渲染負擔
-                setStroke(2, Color.parseColor("#FFEA00")) // 電光黃邊框
+                setColor(Color.parseColor("#B30A0A0A"))
+                setStroke(2, Color.parseColor("#FFEA00"))
             }
             setPadding(18, 14, 18, 14)
             layoutParams = ViewGroup.LayoutParams(
@@ -46,24 +45,22 @@ class ControlPanelService : Service() {
             )
         }
 
-        // 頂部品牌標題（簡化陰影半徑，提升繪製效能）
         val tvTitle = TextView(context).apply {
             text = "🍉 西瓜電競 · 戰術中控台"
             setTextColor(Color.parseColor("#FFEA00"))
             textSize = 13f
             setTypeface(null, android.graphics.Typeface.BOLD)
-            setShadowLayer(3f, 0f, 0f, Color.parseColor("#FFFFEA00")) // 陰影減半，順暢不卡
+            setShadowLayer(3f, 0f, 0f, Color.parseColor("#FFFFEA00"))
             setPadding(0, 0, 0, 8)
         }
         panelLayout?.addView(tvTitle)
 
-        // 前後左右狀態資訊區塊（輕量化霓虹藍）
         val tvStatusInfo = TextView(context).apply {
             text = "⬆️ 前方：待命\n⬇️ 背後：待命\n⬅️ 左側：待命\n➡️ 右側：待命"
             setTextColor(Color.parseColor("#00F0FF"))
             textSize = 12f
             setLineSpacing(4f, 1f)
-            setShadowLayer(3f, 0f, 0f, Color.parseColor("#FF00F0FF")) // 簡化陰影
+            setShadowLayer(3f, 0f, 0f, Color.parseColor("#FF00F0FF"))
         }
         panelLayout?.addView(tvStatusInfo)
 
@@ -86,19 +83,16 @@ class ControlPanelService : Service() {
             y = 200
         }
 
-        // 雙指縮放手勢偵測
         scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 currentScale *= detector.scaleFactor
                 currentScale = currentScale.coerceIn(0.6f, 2.2f)
-                
                 panelLayout?.scaleX = currentScale
                 panelLayout?.scaleY = currentScale
                 return true
             }
         })
 
-        // 單指拖曳與雙指縮放互動監聽
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
@@ -106,11 +100,9 @@ class ControlPanelService : Service() {
 
         panelLayout?.setOnTouchListener { _, event ->
             scaleGestureDetector?.onTouchEvent(event)
-            
             if (event.pointerCount > 1) {
                 return@setOnTouchListener true
             }
-
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = params.x
