@@ -1,11 +1,16 @@
 package com.watermelon.runhelper
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.IBinder
+import androidx.core.app.NotificationCompat
 import kotlin.math.sqrt
 
 class CaptureService : Service() {
@@ -19,13 +24,38 @@ class CaptureService : Service() {
 
     companion object {
         const val ACTION_UPDATE_TACTICAL_DATA = "com.watermelon.runhelper.UPDATE_TACTICAL_DATA"
+        private const val CHANNEL_ID = "TacticalRadarChannel"
+        private const val NOTIFICATION_ID = 1001
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForeground(NOTIFICATION_ID, createNotification())
         startTacticalMonitoring()
         return START_STICKY
+    }
+
+    private fun createNotification(): Notification {
+        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "西瓜跑刀助手運行中",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.createNotificationChannel(channel)
+            CHANNEL_ID
+        } else {
+            ""
+        }
+
+        return NotificationCompat.Builder(this, channelId)
+            .setContentTitle("🍉 西瓜跑刀助手")
+            .setContentText("戰術雷達與撤離監控背景運行中...")
+            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
     }
 
     private fun startTacticalMonitoring() {
@@ -58,7 +88,7 @@ class CaptureService : Service() {
                     val secs = remainingMatchSeconds % 60
                     val timeString = String.format("%02d:%02d", mins, secs)
 
-                    // 撤離倒數提醒（剩 6 分半即 390 秒時緊急警告）
+                    // 剩 6 分半（390秒）即觸發緊急警告
                     val extractionAlert = if (remainingMatchSeconds <= 390) {
                         "⚠️ 撤離緊急警告：$timeString"
                     } else {
@@ -75,7 +105,6 @@ class CaptureService : Service() {
                         }
                         val currentAmplitude = sqrt(sum / readSize)
 
-                        // 動態底噪校準（過濾自身移動雜訊）
                         baselineNoise = baselineNoise * 0.95 + currentAmplitude * 0.05
 
                         if (currentAmplitude > baselineNoise * 1.4 && currentAmplitude in 1400.0..4800.0) {
