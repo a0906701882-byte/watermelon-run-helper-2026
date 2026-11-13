@@ -20,7 +20,6 @@ class ControlPanelService : Service() {
     private var windowManager: WindowManager? = null
     private var panelLayout: LinearLayout? = null
     private var scaleGestureDetector: ScaleGestureDetector? = null
-    
     private var currentScale = 1.0f
 
     override fun onBind(intent: Intent?): IBinder? = null
