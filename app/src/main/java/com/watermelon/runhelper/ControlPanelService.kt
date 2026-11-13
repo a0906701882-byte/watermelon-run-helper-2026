@@ -1,7 +1,10 @@
 package com.watermelon.runhelper
 
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
@@ -22,6 +25,21 @@ class ControlPanelService : Service() {
     private var scaleGestureDetector: ScaleGestureDetector? = null
     private var currentScale = 1.0f
 
+    private lateinit var tvExtraction: TextView
+    private lateinit var tvLogs: TextView
+
+    private val tacticalReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == CaptureService.ACTION_UPDATE_TACTICAL_DATA) {
+                val extraction = intent.getStringExtra("extraction")
+                val logs = intent.getStringExtra("logs")
+
+                tvExtraction.text = extraction
+                tvLogs.text = logs
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -29,39 +47,58 @@ class ControlPanelService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         val context = this
 
+        val filter = IntentFilter(CaptureService.ACTION_UPDATE_TACTICAL_DATA)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(tacticalReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(tacticalReceiver, filter)
+        }
+
+        // 左側戰術主面板容器（極簡無座標版）
         panelLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 12f
-                setColor(Color.parseColor("#B30A0A0A"))
+                cornerRadius = 16f
+                setColor(Color.parseColor("#D90A0A0A"))
                 setStroke(2, Color.parseColor("#FFEA00"))
             }
-            setPadding(18, 14, 18, 14)
+            setPadding(18, 16, 18, 16)
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
 
+        // 1. 頂部品牌標題
         val tvTitle = TextView(context).apply {
-            text = "🍉 西瓜電競 · 戰術中控台"
+            text = "🍉 西瓜護航助手\n     · DELTA FORCE"
             setTextColor(Color.parseColor("#FFEA00"))
             textSize = 13f
             setTypeface(null, android.graphics.Typeface.BOLD)
-            setShadowLayer(3f, 0f, 0f, Color.parseColor("#FFFFEA00"))
+            setShadowLayer(4f, 0f, 0f, Color.parseColor("#FFFFEA00"))
             setPadding(0, 0, 0, 8)
         }
         panelLayout?.addView(tvTitle)
 
-        val tvStatusInfo = TextView(context).apply {
-            text = "⬆️ 前方：待命\n⬇️ 背後：待命\n⬅️ 左側：待命\n➡️ 右側：待命"
-            setTextColor(Color.parseColor("#00F0FF"))
-            textSize = 12f
-            setLineSpacing(4f, 1f)
-            setShadowLayer(3f, 0f, 0f, Color.parseColor("#FF00F0FF"))
+        // 2. 撤離時間倒數與提醒區塊（已移除玩家座標）
+        tvExtraction = TextView(context).apply {
+            text = "⏱️ 撤離倒數：進行中 (安全)"
+            setTextColor(Color.parseColor("#FF5555"))
+            textSize = 11f
+            setLineSpacing(3f, 1f)
+            setPadding(0, 0, 0, 8)
         }
-        panelLayout?.addView(tvStatusInfo)
+        panelLayout?.addView(tvExtraction)
+
+        // 3. 戰術腳步方位日誌
+        tvLogs = TextView(context).apply {
+            text = "🔊 戰術雷達已就緒\n📡 正在監聽敵方腳步..."
+            setTextColor(Color.parseColor("#00FF66"))
+            textSize = 10f
+            setLineSpacing(3f, 1f)
+        }
+        panelLayout?.addView(tvLogs)
 
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -78,8 +115,8 @@ class ControlPanelService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 100
-            y = 200
+            x = 40
+            y = 100
         }
 
         scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -129,6 +166,11 @@ class ControlPanelService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            unregisterReceiver(tacticalReceiver)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         if (panelLayout != null) {
             windowManager?.removeView(panelLayout)
             panelLayout = null
