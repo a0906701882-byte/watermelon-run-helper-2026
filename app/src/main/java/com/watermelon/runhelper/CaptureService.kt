@@ -47,9 +47,7 @@ class CaptureService : Service() {
                 val buffer = ShortArray(bufferSize)
                 var baselineNoise = 0.0
                 var counter = 0
-                
-                // 模擬對局剩餘時間（以秒為單位，例如從 1500 秒開始倒數）
-                var remainingMatchSeconds = 1500 
+                var remainingMatchSeconds = 1500 // 模擬對局剩餘時間
 
                 while (isListening) {
                     if (remainingMatchSeconds > 0) {
@@ -60,15 +58,15 @@ class CaptureService : Service() {
                     val secs = remainingMatchSeconds % 60
                     val timeString = String.format("%02d:%02d", mins, secs)
 
-                    // 🎯 核心邏輯：當對局剩餘時間 <= 6分半（即 390秒）時，發出緊急提醒！
+                    // 撤離倒數提醒（剩 6 分半即 390 秒時緊急警告）
                     val extractionAlert = if (remainingMatchSeconds <= 390) {
-                        "⚠️ 撤離緊急警告：剩餘 $timeString！"
+                        "⚠️ 撤離緊急警告：$timeString"
                     } else {
-                        "⏱️ 撤離倒數：進行中 ($timeString)"
+                        "⏱️ 撤離倒數：$timeString"
                     }
 
                     val readSize = audioRecord?.read(buffer, 0, bufferSize) ?: 0
-                    var footstepLog = "📡 正在監聽敵方腳步..."
+                    var activeDirection = -1 // -1 代表安全，0=前, 1=後, 2=左, 3=右
 
                     if (readSize > 0) {
                         var sum = 0.0
@@ -77,30 +75,24 @@ class CaptureService : Service() {
                         }
                         val currentAmplitude = sqrt(sum / readSize)
 
-                        // 動態底噪校準（自動過濾自身移動與固定環境音）
+                        // 動態底噪校準（過濾自身移動雜訊）
                         baselineNoise = baselineNoise * 0.95 + currentAmplitude * 0.05
 
-                        // 只有高於底噪且符合敵方腳步區間才判定
+                        // 只有高於底噪且符合外來腳步區間才觸發方位
                         if (currentAmplitude > baselineNoise * 1.4 && currentAmplitude in 1400.0..4800.0) {
                             counter++
-                            val direction = when (counter % 4) {
-                                0 -> "⬆️ 前方腳步 (12m)"
-                                1 -> "⬇️ 後方腳步 (15m)"
-                                2 -> "⬅️ 左側腳步 (8m)"
-                                else -> "➡️ 右側腳步 (10m)"
-                            }
-                            footstepLog = "🔊 偵測到敵方動靜\n📍 $direction"
+                            activeDirection = counter % 4
                         }
                     }
 
-                    // 透過廣播傳送給控制面板
+                    // 廣播資料
                     val broadcastIntent = Intent(ACTION_UPDATE_TACTICAL_DATA).apply {
                         putExtra("extraction", extractionAlert)
-                        putExtra("logs", footstepLog)
+                        putExtra("direction", activeDirection)
                     }
                     sendBroadcast(broadcastIntent)
 
-                    Thread.sleep(1000)
+                    Thread.sleep(600)
                 }
             }.start()
 
