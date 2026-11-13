@@ -35,7 +35,6 @@ class CaptureService : Service() {
     private var tvRightAlert: TextView? = null
     private var tvCenterAlert: TextView? = null
     private var tvBackAlert: TextView? = null
-    private var tvDebugInfo: TextView? = null // 新增：即時能量與底噪數值顯示
 
     private var audioRecord: AudioRecord? = null
     private var mediaProjection: MediaProjection? = null
@@ -44,7 +43,7 @@ class CaptureService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
         const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
-        private const val CHANNEL_ID = "WatermelonDebugRadar"
+        private const val CHANNEL_ID = "WatermelonTieredRadar"
         private const val NOTIFICATION_ID = 1
     }
 
@@ -56,15 +55,15 @@ class CaptureService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "西瓜音訊數值雷達",
+                "西瓜分級常駐雷達",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
 
             val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("🍉 西瓜四向雷達")
-                .setContentText("數值監控與隱藏雷達運行中...")
+                .setContentTitle("🍉 西瓜分級雷達")
+                .setContentText("常駐分級監聽中...")
                 .setSmallIcon(android.R.drawable.ic_menu_compass)
                 .build()
 
@@ -81,16 +80,15 @@ class CaptureService : Service() {
             )
         }
 
-        // 建立四向大字提示框（平時隱藏）
-        fun createDirectionBox(gravity: Int): TextView {
+        fun createDirectionBox(gravity: Int, defaultText: String): TextView {
             return TextView(context).apply {
-                text = ""
-                setTextColor(Color.WHITE)
-                textSize = 24f // 24 號清晰大字
+                text = defaultText
+                setTextColor(Color.parseColor("#B0B0B0")) // 待命時為低調灰色
+                textSize = 20f
                 setTypeface(null, android.graphics.Typeface.BOLD)
-                setBackgroundColor(Color.parseColor("#B3141414"))
-                setPadding(28, 18, 28, 18)
-                visibility = View.INVISIBLE
+                setBackgroundColor(Color.parseColor("#99141414")) // 半透明戰術深黑底
+                setPadding(25, 15, 25, 15)
+                visibility = View.VISIBLE
                 layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     this.gravity = gravity
                     setMargins(45, 45, 45, 45)
@@ -98,32 +96,17 @@ class CaptureService : Service() {
             }
         }
 
-        tvLeftAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.START)
+        tvLeftAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.START, "⬅️ 左側:待命")
         hudRootLayout?.addView(tvLeftAlert)
 
-        tvRightAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.END)
+        tvRightAlert = createDirectionBox(Gravity.CENTER_VERTICAL or Gravity.END, "右側:待命 ➡️")
         hudRootLayout?.addView(tvRightAlert)
 
-        tvCenterAlert = createDirectionBox(Gravity.TOP or Gravity.CENTER_HORIZONTAL)
+        tvCenterAlert = createDirectionBox(Gravity.TOP or Gravity.CENTER_HORIZONTAL, "⬆️ 前方:待命")
         hudRootLayout?.addView(tvCenterAlert)
 
-        tvBackAlert = createDirectionBox(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+        tvBackAlert = createDirectionBox(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, "⬇️ 背後:待命")
         hudRootLayout?.addView(tvBackAlert)
-
-        // 建立即時能量與底噪數值小框（置於畫面頂端中央偏左，字體較小不擋視線，方便隨時觀察）
-        tvDebugInfo = TextView(context).apply {
-            text = "能量:0 | 底噪:250"
-            setTextColor(Color.YELLOW)
-            textSize = 13f
-            setBackgroundColor(Color.parseColor("#80000000"))
-            setPadding(14, 8, 14, 8)
-            visibility = View.VISIBLE // 數值常顯供除錯用
-            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                setMargins(0, 15, 0, 0)
-            }
-        }
-        hudRootLayout?.addView(tvDebugInfo)
 
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -239,57 +222,75 @@ class CaptureService : Service() {
                         val footstepThreshold = 18L
                         val hasFootstep = avgEnergy > baselineNoise + footstepThreshold
 
+                        val isNear = avgEnergy > baselineNoise + 65L
+
                         handler.post {
-                            // 隨時更新頂部的即時數值監控
-                            tvDebugInfo?.text = "能量:$avgEnergy | 底噪:$baselineNoise"
+                            // 重設四向預設待命狀態
+                            tvLeftAlert?.text = "⬅️ 左側:待命"
+                            tvLeftAlert?.setTextColor(Color.parseColor("#B0B0B0"))
+                            tvLeftAlert?.textSize = 20f
+
+                            tvRightAlert?.text = "右側:待命 ➡️"
+                            tvRightAlert?.setTextColor(Color.parseColor("#B0B0B0"))
+                            tvRightAlert?.textSize = 20f
+
+                            tvCenterAlert?.text = "⬆️ 前方:待命"
+                            tvCenterAlert?.setTextColor(Color.parseColor("#B0B0B0"))
+                            tvCenterAlert?.textSize = 20f
+
+                            tvBackAlert?.text = "⬇️ 背後:待命"
+                            tvBackAlert?.setTextColor(Color.parseColor("#B0B0B0"))
+                            tvBackAlert?.textSize = 20f
 
                             when {
-                                isSelfAction || !hasFootstep -> {
-                                    // 安全或自身動作：四向大字隱藏
-                                    tvLeftAlert?.visibility = View.INVISIBLE
-                                    tvRightAlert?.visibility = View.INVISIBLE
-                                    tvCenterAlert?.visibility = View.INVISIBLE
-                                    tvBackAlert?.visibility = View.INVISIBLE
+                                isSelfAction -> {
+                                    // 自身動作中不動作
                                 }
-                                else -> {
-                                    // 偵測到周遭腳步：彈出對應方位大字
+                                hasFootstep -> {
                                     when {
                                         lAvg > rAvg * 1.3 -> {
-                                            tvLeftAlert?.text = "⚠️ ⬅️ 【左側】腳步"
-                                            tvLeftAlert?.setTextColor(Color.parseColor("#00E676"))
-                                            tvLeftAlert?.visibility = View.VISIBLE
-
-                                            tvRightAlert?.visibility = View.INVISIBLE
-                                            tvCenterAlert?.visibility = View.INVISIBLE
-                                            tvBackAlert?.visibility = View.INVISIBLE
+                                            if (isNear) {
+                                                tvLeftAlert?.text = "🔥 ⬅️ 【左側】極近貼臉！"
+                                                tvLeftAlert?.setTextColor(Color.parseColor("#FFD700"))
+                                                tvLeftAlert?.textSize = 21f // 調整為 21 號
+                                            } else {
+                                                tvLeftAlert?.text = "⚠️ ⬅️ 【左側】遠處腳步"
+                                                tvLeftAlert?.setTextColor(Color.parseColor("#00E676"))
+                                                tvLeftAlert?.textSize = 20f
+                                            }
                                         }
                                         rAvg > lAvg * 1.3 -> {
-                                            tvLeftAlert?.visibility = View.INVISIBLE
-
-                                            tvRightAlert?.text = "【右側】腳步 ➡️"
-                                            tvRightAlert?.setTextColor(Color.parseColor("#00E676"))
-                                            tvRightAlert?.visibility = View.VISIBLE
-
-                                            tvCenterAlert?.visibility = View.INVISIBLE
-                                            tvBackAlert?.visibility = View.INVISIBLE
+                                            if (isNear) {
+                                                tvRightAlert?.text = "【右側】極近貼臉！ ➡️"
+                                                tvRightAlert?.setTextColor(Color.parseColor("#FFD700"))
+                                                tvRightAlert?.textSize = 21f // 調整為 21 號
+                                            } else {
+                                                tvRightAlert?.text = "【右側】遠處腳步 ➡️"
+                                                tvRightAlert?.setTextColor(Color.parseColor("#00E676"))
+                                                tvRightAlert?.textSize = 20f
+                                            }
                                         }
                                         phaseCross > phaseHistory * 1.12 -> {
-                                            tvLeftAlert?.visibility = View.INVISIBLE
-                                            tvRightAlert?.visibility = View.INVISIBLE
-                                            tvBackAlert?.visibility = View.INVISIBLE
-
-                                            tvCenterAlert?.text = "⚠️ ⬆️ 【正前方】腳步"
-                                            tvCenterAlert?.setTextColor(Color.parseColor("#00E676"))
-                                            tvCenterAlert?.visibility = View.VISIBLE
+                                            if (isNear) {
+                                                tvCenterAlert?.text = "🔥 ⬆️ 【正前方】極近貼臉！"
+                                                tvCenterAlert?.setTextColor(Color.parseColor("#FFD700"))
+                                                tvCenterAlert?.textSize = 21f // 調整為 21 號
+                                            } else {
+                                                tvCenterAlert?.text = "⚠️ ⬆️ 【正前方】遠處腳步"
+                                                tvCenterAlert?.setTextColor(Color.parseColor("#00E676"))
+                                                tvCenterAlert?.textSize = 20f
+                                            }
                                         }
                                         else -> {
-                                            tvLeftAlert?.visibility = View.INVISIBLE
-                                            tvRightAlert?.visibility = View.INVISIBLE
-                                            tvCenterAlert?.visibility = View.INVISIBLE
-
-                                            tvBackAlert?.text = "⚠️ ⬇️ 【背後】敵方腳步！"
-                                            tvBackAlert?.setTextColor(Color.parseColor("#FF5252"))
-                                            tvBackAlert?.visibility = View.VISIBLE
+                                            if (isNear) {
+                                                tvBackAlert?.text = "🚨 ⬇️ 【背後】極近貼臉危機！"
+                                                tvBackAlert?.setTextColor(Color.parseColor("#FF5252"))
+                                                tvBackAlert?.textSize = 21f // 調整為 21 號
+                                            } else {
+                                                tvBackAlert?.text = "⚠️ ⬇️ 【背後】遠處腳步"
+                                                tvBackAlert?.setTextColor(Color.parseColor("#FF8A80"))
+                                                tvBackAlert?.textSize = 20f
+                                            }
                                         }
                                     }
                                 }
