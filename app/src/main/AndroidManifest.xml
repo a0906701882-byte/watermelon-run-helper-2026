@@ -1,14 +1,20 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.watermelon.runhelper">
+
+    <!-- 必要的懸浮窗與背景權限 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
-        android:allowBackup="false"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="西瓜電競雷達"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.NoActionBar">
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -17,12 +23,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 宣告兩個背景服務 -->
         <service
-            android:name=".OverlayService"
+            android:name=".ControlPanelService"
             android:exported="false" />
+
         <service
             android:name=".CaptureService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+
     </application>
+
 </manifest>
