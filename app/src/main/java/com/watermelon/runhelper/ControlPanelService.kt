@@ -19,7 +19,6 @@ class ControlPanelService : Service() {
 
     private var windowManager: WindowManager? = null
     
-    // 全螢幕雷達與右上角倒數視窗
     private var screenOverlayLayout: FrameLayout? = null
     private lateinit var tvExtractionTopRight: TextView
     private lateinit var tvFront: TextView
@@ -33,12 +32,10 @@ class ControlPanelService : Service() {
                 val extraction = intent.getStringExtra("extraction")
                 val activeDir = intent.getIntExtra("direction", -1)
 
-                // 更新右上角撤離倒數
                 tvExtractionTopRight.text = extraction
 
-                // 更新超大四周方位燈號
-                val defaultBg = Color.parseColor("#99000000") // 半透明黑
-                val alertBg = Color.parseColor("#E6FF3333")   // 亮紅警報
+                val defaultBg = Color.parseColor("#99000000")
+                val alertBg = Color.parseColor("#E6FF3333") // 亮紅警報
                 val alertText = Color.parseColor("#FFFFFF")
                 val defaultText = Color.parseColor("#CCCCCC")
 
@@ -77,7 +74,6 @@ class ControlPanelService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // 建立全螢幕容器（負責放置右上角時間與超大四周方位）
         screenOverlayLayout = FrameLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -85,7 +81,7 @@ class ControlPanelService : Service() {
             )
         }
 
-        // 1. 右上角撤離倒數時間（醒目大字）
+        // 右上角撤離倒數
         tvExtractionTopRight = TextView(context).apply {
             text = "⏱️ 撤離倒數：計算中..."
             setTextColor(Color.parseColor("#FF5555"))
@@ -104,7 +100,7 @@ class ControlPanelService : Service() {
         }
         screenOverlayLayout?.addView(tvExtractionTopRight)
 
-        // 2. 上方超大前方指示
+        // 上方超大前方
         tvFront = createHugeDirectionLabel(context, "⬆️ 前方敵方動靜").apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -116,7 +112,7 @@ class ControlPanelService : Service() {
         }
         screenOverlayLayout?.addView(tvFront)
 
-        // 3. 下方超大後方指示
+        // 下方超大後方
         tvBack = createHugeDirectionLabel(context, "⬇️ 後方敵方動靜").apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -128,7 +124,7 @@ class ControlPanelService : Service() {
         }
         screenOverlayLayout?.addView(tvBack)
 
-        // 4. 左側超大左方指示
+        // 左側超大左方
         tvLeft = createHugeDirectionLabel(context, "⬅️ 左側").apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -140,7 +136,7 @@ class ControlPanelService : Service() {
         }
         screenOverlayLayout?.addView(tvLeft)
 
-        // 5. 右側超大右方指示
+        // 右側超大右方
         tvRight = createHugeDirectionLabel(context, "➡️ 右側").apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -158,7 +154,7 @@ class ControlPanelService : Service() {
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, // 全螢幕穿透觸控，完全不影響遊戲操作
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, // 穿透觸控不擋遊戲
             PixelFormat.TRANSLUCENT
         )
 
@@ -173,7 +169,7 @@ class ControlPanelService : Service() {
         return TextView(context).apply {
             this.text = text
             setTextColor(Color.parseColor("#CCCCCC"))
-            textSize = 16f // 超大字體
+            textSize = 16f
             setTypeface(null, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
             setBackgroundColor(Color.parseColor("#99000000"))
