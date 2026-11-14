@@ -21,9 +21,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 自動生成 Gradle Wrapper
+      - name: 自動生成 Gradle Wrapper (升級至 8.9)
         run: |
-          gradle wrapper --gradle-version 8.0
+          gradle wrapper --gradle-version 8.9
 
       - name: 賦予 Gradle 執行權限
         run: chmod +x gradlew
