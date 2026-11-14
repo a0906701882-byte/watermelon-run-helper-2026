@@ -1,29 +1,6 @@
-plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
-}
-
-android {
-    namespace 'com.watermelon.runhelper'
-    compileSdk 35
-
-    defaultConfig {
-        applicationId 'com.watermelon.runhelper'
-        minSdk 29
-        targetSdk 35
-        versionCode 3
-        versionName '3.0.0'
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-    kotlinOptions { jvmTarget = '17' }
-}
-
 dependencies {
-    implementation 'com.google.mlkit:text-recognition-chinese:16.0.1'
-    implementation 'androidx.core:core-ktx:1.15.0'
-    testImplementation 'junit:junit:4.13.2'
+    // ... 保留你原本的依賴 ...
+
+    // 新增：Google ML Kit 離線文字辨識（用於自動抓取撤離倒數）
+    implementation 'com.google.mlkit:text-recognition:16.0.0'
 }
