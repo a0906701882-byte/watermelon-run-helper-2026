@@ -1,152 +1,208 @@
-package com.watermelon.runhelper
+package com.example.watermelonhelper // ⚠️ 請記得改成你原本專案最上方的 package 名稱！
 
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
-import android.media.AudioFormat
-import android.media.AudioRecord
-import android.media.MediaRecorder
+import android.graphics.Bitmap
+import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
+import android.media.ImageReader
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
-import kotlin.math.sqrt
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.util.regex.Pattern
 
-class CaptureService : Service() {
-
-    private var audioRecord: AudioRecord? = null
-    private var isListening = false
-    private val sampleRate = 44100
-    private val channelConfig = AudioFormat.CHANNEL_IN_MONO
-    private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+class ScreenCaptureService : Service() {
 
     companion object {
-        const val ACTION_UPDATE_TACTICAL_DATA = "com.watermelon.runhelper.UPDATE_TACTICAL_DATA"
-        private const val CHANNEL_ID = "TacticalRadarChannel"
-        private const val NOTIFICATION_ID = 1001
+        const val ACTION_START = "ACTION_START_CAPTURE"
+        const val ACTION_STOP = "ACTION_STOP_CAPTURE"
+        const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
+        const val EXTRA_RESULT_DATA = "EXTRA_RESULT_DATA"
+
+        // 廣播給懸浮窗的 Action 與資料鍵值
+        const val ACTION_COUNTDOWN_UPDATE = "com.example.watermelonhelper.COUNTDOWN_UPDATE"
+        const val EXTRA_TIME_TEXT = "time_text"
+        const val EXTRA_TOTAL_SECONDS = "total_seconds"
+        const val EXTRA_IS_EMERGENCY = "is_emergency"
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    private var mediaProjection: MediaProjection? = null
+    private var virtualDisplay: VirtualDisplay? = null
+    private var imageReader: ImageReader? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+
+    private var screenWidth = 0
+    private var screenHeight = 0
+    private var screenDensity = 0
+    private var isRunning = false
+
+    // 匹配 "MM:SS" 格式的正則表達式（例如 14:25 或 02:30）
+    private val timePattern = Pattern.compile("\\b([0-5]?\\d):([0-5]\\d)\\b")
+
+    private val captureRunnable = object : Runnable {
+        override fun run() {
+            if (!isRunning) return
+            processLatestFrame()
+            // 每 1000 毫秒（1秒）辨識一次，兼顧準確度與極低耗電
+            handler.postDelayed(this, 1000L)
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        try {
-            startForeground(NOTIFICATION_ID, createNotification())
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        when (intent?.action) {
+            ACTION_START -> {
+                val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+                val resultData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(EXTRA_RESULT_DATA)
+                }
 
-        startAudioMonitoring()
-        return START_STICKY
+                if (resultCode == Activity.RESULT_OK && resultData != null) {
+                    startForegroundNotification()
+                    initMediaProjection(resultCode, resultData)
+                }
+            }
+            ACTION_STOP -> {
+                stopCapture()
+                stopSelf()
+            }
+        }
+        return START_NOT_STICKY
     }
 
-    private fun createNotification(): Notification {
-        val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    private fun startForegroundNotification() {
+        val channelId = "watermelon_ocr_channel"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                "西瓜跑刀助手收音中",
+                channelId,
+                "西瓜跑刀助手 - 撤離倒數監控",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
-            manager?.createNotificationChannel(channel)
-            CHANNEL_ID
-        } else {
-            ""
+            manager.createNotificationChannel(channel)
         }
 
-        return NotificationCompat.Builder(this, channelId)
-            .setContentTitle("🍉 西瓜跑刀助手")
-            .setContentText("戰術音訊監控與撤離倒數運行中...")
+        val notification: Notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("🍉 西瓜戰術視覺監控中")
+            .setContentText("正在自動偵測對局撤離倒數時間...")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
+
+        startForeground(2026, notification)
     }
 
-    private fun startAudioMonitoring() {
-        if (isListening) return
+    private fun initMediaProjection(resultCode: Int, data: Intent) {
+        val metrics = resources.displayMetrics
+        screenWidth = metrics.widthPixels
+        screenHeight = metrics.heightPixels
+        screenDensity = metrics.densityDpi
 
+        val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        mediaProjection = projectionManager.getMediaProjection(resultCode, data)
+
+        imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
+        virtualDisplay = mediaProjection?.createVirtualDisplay(
+            "WatermelonScreenCapture",
+            screenWidth,
+            screenHeight,
+            screenDensity,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+            imageReader?.surface,
+            null,
+            handler
+        )
+
+        isRunning = true
+        handler.post(captureRunnable)
+    }
+
+    private fun processLatestFrame() {
+        val image = imageReader?.acquireLatestImage() ?: return
         try {
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                channelConfig,
-                audioFormat,
-                bufferSize
+            val planes = image.planes
+            val buffer = planes[0].buffer
+            val pixelStride = planes[0].pixelStride
+            val rowStride = planes[0].rowStride
+            val rowPadding = rowStride - pixelStride * screenWidth
+
+            val fullBitmap = Bitmap.createBitmap(
+                screenWidth + rowPadding / pixelStride,
+                screenHeight,
+                Bitmap.Config.ARGB_8888
             )
+            fullBitmap.copyPixelsFromBuffer(buffer)
 
-            if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
-                audioRecord?.startRecording()
-                isListening = true
+            // 🎯 裁切畫面「上方區域」（橫向遊玩時，對局時間與撤離倒數通常位於頂部中央或右上角）
+            // 僅裁切頂部 20% 高度，大幅提升 OCR 速度並避免誤判聊天室數字
+            val cropHeight = (screenHeight * 0.22).toInt().coerceAtLeast(100)
+            val croppedBitmap = Bitmap.createBitmap(fullBitmap, 0, 0, screenWidth, cropHeight)
+            fullBitmap.recycle()
 
-                Thread {
-                    val buffer = ShortArray(bufferSize)
-                    var baselineNoise = 0.0
-                    var directionCounter = 0
-                    var remainingMatchSeconds = 1500 // 15:00 倒數
-
-                    while (isListening) {
-                        try {
-                            if (remainingMatchSeconds > 0) {
-                                remainingMatchSeconds--
-                            }
-                            val mins = remainingMatchSeconds / 60
-                            val secs = remainingMatchSeconds % 60
-                            val timeString = String.format("%02d:%02d", mins, secs)
-
-                            val extractionAlert = if (remainingMatchSeconds <= 390) {
-                                "⚠️ 撤離緊急警告：$timeString"
-                            } else {
-                                "⏱️ 撤離倒數：$timeString"
-                            }
-
-                            val readSize = audioRecord?.read(buffer, 0, bufferSize) ?: 0
-                            var activeDirection = -1
-
-                            if (readSize > 0) {
-                                var sum = 0.0
-                                for (i in 0 until readSize) {
-                                    sum += (buffer[i] * buffer[i]).toDouble()
-                                }
-                                val currentAmplitude = sqrt(sum / readSize)
-
-                                baselineNoise = baselineNoise * 0.92 + currentAmplitude * 0.08
-
-                                if (currentAmplitude > baselineNoise * 1.3 && currentAmplitude in 1000.0..6000.0) {
-                                    directionCounter++
-                                    activeDirection = directionCounter % 4
-                                }
-                            }
-
-                            val broadcastIntent = Intent(ACTION_UPDATE_TACTICAL_DATA).apply {
-                                putExtra("extraction", extractionAlert)
-                                putExtra("direction", activeDirection)
-                            }
-                            sendBroadcast(broadcastIntent)
-
-                            Thread.sleep(400)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    }
-                }.start()
-            }
-        } catch (e: SecurityException) {
-            e.printStackTrace()
+            val inputImage = InputImage.fromBitmap(croppedBitmap, 0)
+            recognizer.process(inputImage)
+                .addOnSuccessListener { visionText ->
+                    extractCountdownTime(visionText.text)
+                    croppedBitmap.recycle()
+                }
+                .addOnFailureListener {
+                    croppedBitmap.recycle()
+                }
         } catch (e: Exception) {
             e.printStackTrace()
+        } finally {
+            image.close()
         }
+    }
+
+    private fun extractCountdownTime(recognizedText: String) {
+        val matcher = timePattern.matcher(recognizedText)
+        if (matcher.find()) {
+            val timeStr = matcher.group(0) ?: return
+            val minutes = matcher.group(1)?.toIntOrNull() ?: 0
+            val seconds = matcher.group(2)?.toIntOrNull() ?: 0
+            val totalSeconds = minutes * 60 + seconds
+
+            // 若總秒數小於等於 90 秒（1分30秒），觸發緊急撤離警告
+            val isEmergency = totalSeconds in 1..90
+
+            val broadcastIntent = Intent(ACTION_COUNTDOWN_UPDATE).apply {
+                setPackage(packageName)
+                putExtra(EXTRA_TIME_TEXT, timeStr)
+                putExtra(EXTRA_TOTAL_SECONDS, totalSeconds)
+                putExtra(EXTRA_IS_EMERGENCY, isEmergency)
+            }
+            sendBroadcast(broadcastIntent)
+        }
+    }
+
+    private fun stopCapture() {
+        isRunning = false
+        handler.removeCallbacks(captureRunnable)
+        virtualDisplay?.release()
+        imageReader?.close()
+        mediaProjection?.stop()
     }
 
     override fun onDestroy() {
+        stopCapture()
         super.onDestroy()
-        isListening = false
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-            audioRecord = null
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
     }
+
+    override fun onBind(intent: Intent?): IBinder? = null
 }
