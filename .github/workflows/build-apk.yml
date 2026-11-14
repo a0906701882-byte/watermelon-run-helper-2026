@@ -21,8 +21,12 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 設定 Gradle 環境 (自動處理 wrapper 與快取)
-        uses: gradle/actions/setup-gradle@v3
+      - name: 自動生成 Gradle Wrapper
+        run: |
+          gradle wrapper --gradle-version 8.0
+
+      - name: 賦予 Gradle 執行權限
+        run: chmod +x gradlew
 
       - name: 編譯 Debug APK
         run: ./gradlew assembleDebug
