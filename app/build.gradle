@@ -1,6 +1,39 @@
-dependencies {
-    // ... 保留你原本的依賴 ...
+plugins {
+    id 'com.android.application'
+}
 
-    // 新增：Google ML Kit 離線文字辨識（用於自動抓取撤離倒數）
+android {
+    namespace 'com.example.watermelonhelper' // ⚠️ 請確認這裡是否與你專案的 package 名稱一致
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.example.watermelonhelper"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // 🎯 自動偵測撤離倒數所需的 Google ML Kit 離線文字辨識
     implementation 'com.google.mlkit:text-recognition:16.0.0'
 }
