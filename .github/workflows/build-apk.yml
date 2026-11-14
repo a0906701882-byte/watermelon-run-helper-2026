@@ -21,13 +21,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 安裝 Gradle 並自動生成 gradlew
-        run: |
-          sudo apt-get update && sudo apt-get install -y gradle
-          gradle wrapper
-
-      - name: 賦予 Gradle 執行權限
-        run: chmod +x gradlew
+      - name: 設定 Gradle 環境 (自動處理 wrapper 與快取)
+        uses: gradle/actions/setup-gradle@v3
 
       - name: 編譯 Debug APK
         run: ./gradlew assembleDebug
