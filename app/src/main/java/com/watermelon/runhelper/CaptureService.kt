@@ -31,14 +31,13 @@ class CaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // 🛡️ 必須在第一時間建立通知並呼叫 startForeground，避免 Android 12+ 強制終止
         try {
             startForeground(NOTIFICATION_ID, createNotification())
         } catch (e: Exception) {
             e.printStackTrace()
         }
 
-        startTacticalMonitoring()
+        startAudioMonitoring()
         return START_STICKY
     }
 
@@ -46,7 +45,7 @@ class CaptureService : Service() {
         val channelId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "西瓜跑刀助手運行中",
+                "西瓜跑刀助手收音中",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
@@ -58,13 +57,13 @@ class CaptureService : Service() {
 
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("🍉 西瓜跑刀助手")
-            .setContentText("戰術雷達監控中...")
+            .setContentText("戰術音訊監控與撤離倒數運行中...")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
-    private fun startTacticalMonitoring() {
+    private fun startAudioMonitoring() {
         if (isListening) return
 
         try {
@@ -76,7 +75,6 @@ class CaptureService : Service() {
                 bufferSize
             )
 
-            // 🛡️ 加上防護避免因為麥克風被佔用而崩潰
             if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
                 audioRecord?.startRecording()
                 isListening = true
@@ -84,15 +82,14 @@ class CaptureService : Service() {
                 Thread {
                     val buffer = ShortArray(bufferSize)
                     var baselineNoise = 0.0
-                    var counter = 0
-                    var remainingMatchSeconds = 1500
+                    var directionCounter = 0
+                    var remainingMatchSeconds = 1500 // 15:00 倒數
 
                     while (isListening) {
                         try {
                             if (remainingMatchSeconds > 0) {
                                 remainingMatchSeconds--
                             }
-
                             val mins = remainingMatchSeconds / 60
                             val secs = remainingMatchSeconds % 60
                             val timeString = String.format("%02d:%02d", mins, secs)
@@ -112,11 +109,12 @@ class CaptureService : Service() {
                                     sum += (buffer[i] * buffer[i]).toDouble()
                                 }
                                 val currentAmplitude = sqrt(sum / readSize)
-                                baselineNoise = baselineNoise * 0.95 + currentAmplitude * 0.05
 
-                                if (currentAmplitude > baselineNoise * 1.4 && currentAmplitude in 1400.0..4800.0) {
-                                    counter++
-                                    activeDirection = counter % 4
+                                baselineNoise = baselineNoise * 0.92 + currentAmplitude * 0.08
+
+                                if (currentAmplitude > baselineNoise * 1.3 && currentAmplitude in 1000.0..6000.0) {
+                                    directionCounter++
+                                    activeDirection = directionCounter % 4
                                 }
                             }
 
@@ -126,7 +124,7 @@ class CaptureService : Service() {
                             }
                             sendBroadcast(broadcastIntent)
 
-                            Thread.sleep(600)
+                            Thread.sleep(400)
                         } catch (e: Exception) {
                             e.printStackTrace()
                         }
