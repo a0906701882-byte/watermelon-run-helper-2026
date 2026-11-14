@@ -1,4 +1,4 @@
-// 1. 在 MainActivity 類別成員變數中加入：
+// 1. 在 MainActivity.kt 類別成員變數中加入：
 private val screenCaptureLauncher = registerForActivityResult(
     androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
 ) { result ->
