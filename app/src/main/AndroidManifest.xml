@@ -1,35 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- 在 <manifest> 標籤內加入權限 -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<application ...>
+    <!-- ... 保留你原本的 Activity 與 ControlPanelService ... -->
 
-    <application
-        android:allowBackup="true"
-        android:label="西瓜跑刀助手"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <service
-            android:name=".CaptureService"
-            android:foregroundServiceType="microphone"
-            android:exported="false" />
-
-        <service
-            android:name=".ControlPanelService"
-            android:exported="false" />
-
-    </application>
-
-</manifest>
+    <!-- 新增：自動偵測撤離倒數的螢幕擷取服務 -->
+    <service
+        android:name=".ScreenCaptureService"
+        android:enabled="true"
+        android:exported="false"
+        android:foregroundServiceType="mediaProjection" />
+</application>
