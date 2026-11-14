@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 必要的系統與錄製權限 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
@@ -16,7 +15,6 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
-        <!-- 主畫面 Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -26,13 +24,11 @@
             </intent-filter>
         </activity>
 
-        <!-- 懸浮窗服務 -->
         <service
             android:name=".ControlPanelService"
             android:enabled="true"
             android:exported="false" />
 
-        <!-- 自動偵測撤離倒數的螢幕擷取與 OCR 服務 -->
         <service
             android:name=".ScreenCaptureService"
             android:enabled="true"
