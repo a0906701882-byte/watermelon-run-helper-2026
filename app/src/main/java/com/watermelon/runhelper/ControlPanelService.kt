@@ -32,7 +32,9 @@ class ControlPanelService : Service() {
                     val extraction = intent.getStringExtra("extraction")
                     val activeDir = intent.getIntExtra("direction", -1)
 
-                    tvExtractionTopRight.text = extraction
+                    if (!extraction.isNullOrEmpty()) {
+                        tvExtractionTopRight.text = extraction
+                    }
 
                     val defaultBg = Color.parseColor("#99000000")
                     val alertBg = Color.parseColor("#E6FF3333")
@@ -86,7 +88,7 @@ class ControlPanelService : Service() {
             }
 
             tvExtractionTopRight = TextView(context).apply {
-                text = "⏱️ 撤離倒數：計算中..."
+                text = "⏱️ 撤離倒數：15:00"
                 setTextColor(Color.parseColor("#FF5555"))
                 textSize = 15f
                 setTypeface(null, android.graphics.Typeface.BOLD)
@@ -103,7 +105,7 @@ class ControlPanelService : Service() {
             }
             screenOverlayLayout?.addView(tvExtractionTopRight)
 
-            tvFront = createHugeDirectionLabel(context, "⬆️ 前方敵方動靜").apply {
+            tvFront = createHugeDirectionLabel(context, "⬆️ 前方").apply {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.WRAP_CONTENT,
                     FrameLayout.LayoutParams.WRAP_CONTENT
@@ -114,7 +116,7 @@ class ControlPanelService : Service() {
             }
             screenOverlayLayout?.addView(tvFront)
 
-            tvBack = createHugeDirectionLabel(context, "⬇️ 後方敵方動靜").apply {
+            tvBack = createHugeDirectionLabel(context, "⬇️ 後方").apply {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.WRAP_CONTENT,
                     FrameLayout.LayoutParams.WRAP_CONTENT
