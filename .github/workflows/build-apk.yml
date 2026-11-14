@@ -2,14 +2,14 @@ name: Build and Release APK
 
 on:
   push:
-    branches: [ "main", "master" ] # 當你推送程式碼時自動觸發
+    branches: [ "main", "master" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write # 賦予自動建立 Release 的權限
+      contents: write
 
     steps:
       - name: 檢查程式碼
@@ -20,6 +20,11 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: 安裝 Gradle 並自動生成 gradlew
+        run: |
+          sudo apt-get update && sudo apt-get install -y gradle
+          gradle wrapper
 
       - name: 賦予 Gradle 執行權限
         run: chmod +x gradlew
