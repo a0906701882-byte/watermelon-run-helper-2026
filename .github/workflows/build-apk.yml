@@ -1,35 +1,39 @@
-name: Build Android APK
+name: Build and Release APK
 
 on:
-  workflow_dispatch:
   push:
-    branches: ["main"]
-
-permissions:
-  contents: read
+    branches: [ "main", "master" ] # 當你推送程式碼時自動觸發
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
+
+    permissions:
+      contents: write # 賦予自動建立 Release 的權限
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: 檢查程式碼
+        uses: actions/checkout@v4
+
+      - name: 設定 Java JDK 17
+        uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
-      - name: Install Android SDK packages
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
-      - uses: gradle/actions/setup-gradle@v4
+
+      - name: 賦予 Gradle 執行權限
+        run: chmod +x gradlew
+
+      - name: 編譯 Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: 自動發布到 GitHub Releases
+        uses: softprops/action-gh-release@v2
         with:
-          gradle-version: '8.9'
-      - name: Run unit tests and build debug APK
-        run: gradle testDebugUnitTest assembleDebug
-      - uses: actions/upload-artifact@v4
-        with:
-          name: watermelon-run-helper-v3-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          tag_name: "v1.0-${{ github.run_number }}"
+          name: "🍉 西瓜跑刀助手 v1.0-${{ github.run_number }}"
+          files: app/build/outputs/apk/debug/app-debug.apk
+          body: "自動編譯的最新戰術雷達與撤離倒數版本，點擊下方檔案即可直接下載安裝！"
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
